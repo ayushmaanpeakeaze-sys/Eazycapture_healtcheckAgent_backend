@@ -279,6 +279,8 @@ class HealthCheckResult(Base):
         Index("ix_hcr_ran_at", "ran_at"),
         Index("ix_hcr_company_ran_at", "company_id", "ran_at"),
         Index("ix_hcr_document_ran_at", "document_id", "ran_at"),
+        Index("ix_hcr_company_kind_status", "company_id", "kind", "status"),
+        Index("ix_hcr_result_gin", "result", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
