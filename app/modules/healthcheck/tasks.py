@@ -464,6 +464,10 @@ def _fetch_audit_transactions(
                 except Exception:    # noqa: BLE001 — fall through to the clear error
                     healed = False
             if not healed:
+                row = db.get(Company, company.id)
+                if row is not None and not row.needs_reconnect:
+                    row.needs_reconnect = True
+                    db.commit()
                 # A connected company whose Xero pull fails must not fall back to
                 # stale seed data; surface a clear "reconnect Xero" error instead.
                 logger.exception(
@@ -477,6 +481,10 @@ def _fetch_audit_transactions(
                 ) from exc
         # Pull succeeded — trust it even if empty; a connected org with no
         # invoices is genuinely empty, not a reason to show seed data.
+        row = db.get(Company, company.id)
+        if row is not None and row.needs_reconnect:
+            row.needs_reconnect = False
+            db.commit()
         shaped = [_reshape_xero_to_batch(raw) for raw in raw_invoices]
         # Bank transactions (Money In/Out), tagged RECEIVE/SPEND — feed only the
         # Unexpected-Account/Tax checks (the orchestrator splits them back out).

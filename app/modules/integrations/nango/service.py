@@ -322,6 +322,7 @@ class NangoService:
             provider_config_key=self._provider_config_key,
             action=action,
             input_data=input_data,
+            surface_auth=True,
         )
         if isinstance(result, dict) and isinstance(result.get(result_key), list):
             return result[result_key]

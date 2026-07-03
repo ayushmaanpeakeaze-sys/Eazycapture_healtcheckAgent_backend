@@ -127,6 +127,7 @@ class CompaniesPanoramaService:
                 company_id=company.id,
                 name=company.name,
                 is_active=company.is_active,
+                needs_reconnect=company.needs_reconnect,
                 nango_connection_id=company.nango_connection_id,
                 xero_tenant_id=company.xero_tenant_id,
                 health_score=health_score,

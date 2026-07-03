@@ -72,6 +72,9 @@ class Company(Base):
     # button forces the right tenant context.
     xero_shortcode: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    needs_reconnect: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false"),
+    )
     # Per-client audit configuration, e.g. {"disabled_rules": [...],
     # "ignore_before": "2025-01-01"}. NULL/empty → every check runs, no floor.
     audit_config: Mapped[Optional[dict[str, Any]]] = mapped_column(

@@ -31,6 +31,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import AsyncSessionLocal
+from app.modules.integrations.nango.client import NangoAuthError
 from app.modules.integrations.nango.service import NangoService
 from app.modules.integrations.sync.models import (
     SYNC_ENTITIES,
@@ -105,6 +106,7 @@ class SyncResult:
     since: Optional[str] = None
     watermark: Optional[datetime] = None
     error: Optional[str] = None
+    auth_error: bool = False
 
 
 # --- page fetchers -------------------------------------------------------
@@ -321,7 +323,10 @@ class SyncEngine:
             await db.commit()
             logger.exception(
                 "[Sync] FAILED company=%s entity=%s", company.id, entity)
-            return SyncResult(entity, status="error", error=str(exc))
+            return SyncResult(
+                entity, status="error", error=str(exc),
+                auth_error=isinstance(exc, NangoAuthError),
+            )
 
     async def sync_company(
         self,
@@ -372,7 +377,24 @@ class SyncEngine:
             "[Sync] company=%s done: %d/%d entities ok, %d records",
             company.id, ok, len(results), records,
         )
+        await self._update_connection_health(company.id, results)
         return results
+
+    async def _update_connection_health(
+        self, company_id, results: dict[str, SyncResult],
+    ) -> None:
+        if any(r.auth_error for r in results.values()):
+            target = True
+        elif any(r.status == "ok" for r in results.values()):
+            target = False
+        else:
+            return
+        from app.modules.healthcheck.models import Company
+        async with AsyncSessionLocal() as db:
+            company = await db.get(Company, company_id)
+            if company is not None and company.needs_reconnect != target:
+                company.needs_reconnect = target
+                await db.commit()
 
 
 __all__ = [

@@ -233,6 +233,7 @@ def test_audit_fails_visibly_on_xero_auth_error(monkeypatch):
         company = db.get(Company, DEMO_CO_ID)
         original_conn = company.nango_connection_id
         original_tenant = company.xero_tenant_id
+        original_reconnect = company.needs_reconnect
         company.nango_connection_id = "conn-broken"
         company.xero_tenant_id = "tenant-broken"
         db.commit()
@@ -246,6 +247,7 @@ def test_audit_fails_visibly_on_xero_auth_error(monkeypatch):
             company = db.get(Company, DEMO_CO_ID)
             company.nango_connection_id = original_conn
             company.xero_tenant_id = original_tenant
+            company.needs_reconnect = original_reconnect
             db.commit()
 
 
@@ -296,6 +298,51 @@ async def test_send_raises_on_dead_connection(monkeypatch):
 
     with pytest.raises(NangoAuthError):
         await client._send("GET", "http://x/proxy/api.xro/2.0/Contacts", headers={})
+
+
+async def test_send_surfaces_auth_on_read_actions(monkeypatch):
+    """A read Action POST (surface_auth=True) raises on 401/403 so a dead grant
+    during sync isn't misread as empty data; a plain POST still returns None."""
+    import app.modules.integrations.nango.client as client_mod
+    from app.modules.integrations.nango.client import NangoAuthError
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def request(self, method, url, **k):
+            return httpx.Response(403, text="Forbidden",
+                                  request=httpx.Request(method, url))
+
+    monkeypatch.setattr(client_mod.httpx, "AsyncClient", _FakeAsyncClient)
+    client = NangoClient(secret_key="secret_xxx")
+
+    with pytest.raises(NangoAuthError):
+        await client._send("POST", "http://x/action/trigger", headers={},
+                           surface_auth=True)
+    assert await client._send(
+        "POST", "http://x/action/trigger", headers={},
+    ) is None
+
+
+async def test_read_action_surfaces_dead_grant(monkeypatch):
+    """A list-* read Action surfaces a dead grant as NangoAuthError, not []."""
+    import app.modules.integrations.nango.client as client_mod
+    from app.modules.integrations.nango.client import NangoAuthError
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def request(self, method, url, **k):
+            return httpx.Response(403, text="Forbidden",
+                                  request=httpx.Request(method, url))
+
+    monkeypatch.setattr(client_mod.httpx, "AsyncClient", _FakeAsyncClient)
+    svc = NangoService(client=NangoClient(secret_key="secret_xxx"))
+    with pytest.raises(NangoAuthError):
+        await svc._action_list_full(
+            "conn", "list-invoices-full", "invoices", tenant_id="t")
 
 
 async def test_action_revoke_connection_triggers_with_tenant(monkeypatch):

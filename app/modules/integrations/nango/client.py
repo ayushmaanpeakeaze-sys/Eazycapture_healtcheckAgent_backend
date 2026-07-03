@@ -165,6 +165,7 @@ class NangoClient:
         provider_config_key: str,
         action: str,
         input_data: Optional[dict[str, Any]] = None,
+        surface_auth: bool = False,
     ) -> Optional[Any]:
         """Call a Nango Action synchronously and return whatever JSON the
         TypeScript function returns.
@@ -184,6 +185,7 @@ class NangoClient:
                 "action_name": action,
                 "input": input_data or {},
             },
+            surface_auth=surface_auth,
         )
 
     # ---------------------------------------------------------------
@@ -291,6 +293,7 @@ class NangoClient:
         params: Optional[dict[str, Any]] = None,
         json: Optional[dict[str, Any]] = None,
         content: Optional[bytes] = None,
+        surface_auth: bool = False,
     ) -> Optional[dict[str, Any]]:
         # Xero rate-limits per tenant and app-wide. On 429, honour
         # Retry-After and retry rather than fail-open to None.
@@ -330,7 +333,7 @@ class NangoClient:
                 # A dead/expired connection on a READ must surface, not return
                 # None, so callers don't misread it as empty data (Nango replies
                 # 401/403, or 400 "Failed to get connection"). Writes return None.
-                if method == "GET" and (
+                if (method == "GET" or surface_auth) and (
                     resp.status_code in (401, 403)
                     or "Failed to get connection" in (resp.text or "")
                 ):

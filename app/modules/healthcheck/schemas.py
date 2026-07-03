@@ -370,6 +370,7 @@ class CompanyHealthRow(BaseModel):
     company_id: UUID
     name: str
     is_active: bool
+    needs_reconnect: bool = False
     nango_connection_id: Optional[str] = None
     xero_tenant_id: Optional[str] = None
     health_score: Optional[int] = None      # 0..100, None when never audited
