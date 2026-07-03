@@ -45,21 +45,14 @@ class NangoService:
         to decide between the real path and the seed/stub fallback."""
         return self._client._is_enabled()
 
-    async def find_live_xero_connection(
+    async def _live_xero_connection_ids(
         self, end_user_id: Optional[str] = None,
-    ) -> Optional[tuple[str, str]]:
-        """Newest live Xero connection ``(connection_id, tenant_id)`` in Nango, or
-        None. Lets an audit SELF-HEAL when a company's stored connection-id has
-        gone stale — the Nango free plan mints a brand-new connection-id on every
-        reconnect, leaving the company row pointing at a dead one.
-
-        When ``end_user_id`` is given, ONLY that end-user's connections are
-        considered. The connect-session stamps every connection with the
-        authenticated user's id, so this scopes the lookup to the caller — one
-        firm can never pick up another firm's connection."""
+    ) -> list[str]:
+        """All live Xero connection-ids in Nango, newest first. Scoped to
+        ``end_user_id`` (firm isolation) when given."""
         c = self._client
         if not c._is_enabled():
-            return None
+            return []
         body = await c._send(
             "GET", f"{c._base_url}/connection",
             headers={"Authorization": f"Bearer {c._secret_key}"},
@@ -72,17 +65,55 @@ class NangoService:
         if end_user_id is not None:
             want = str(end_user_id).strip()
             xero = [cn for cn in xero if _connection_end_user_id(cn) == want]
-        if not xero:
-            return None
         xero.sort(key=lambda cn: cn.get("created") or cn.get("created_at") or "", reverse=True)
-        cid = (xero[0].get("connection_id") or xero[0].get("id") or "").strip()
-        if not cid:
+        ids: list[str] = []
+        for cn in xero:
+            cid = (cn.get("connection_id") or cn.get("id") or "").strip()
+            if cid and cid not in ids:
+                ids.append(cid)
+        return ids
+
+    async def find_live_xero_connection(
+        self, end_user_id: Optional[str] = None,
+    ) -> Optional[tuple[str, str]]:
+        """Newest live Xero connection ``(connection_id, tenant_id)`` in Nango, or
+        None. Lets an audit SELF-HEAL when a company's stored connection-id has
+        gone stale — the Nango free plan mints a brand-new connection-id on every
+        reconnect, leaving the company row pointing at a dead one.
+
+        When ``end_user_id`` is given, ONLY that end-user's connections are
+        considered. The connect-session stamps every connection with the
+        authenticated user's id, so this scopes the lookup to the caller — one
+        firm can never pick up another firm's connection."""
+        ids = await self._live_xero_connection_ids(end_user_id)
+        if not ids:
             return None
-        full = await c.get_connection(cid, self._provider_config_key)
+        cid = ids[0]
+        full = await self._client.get_connection(cid, self._provider_config_key)
         tenant = ((full or {}).get("connection_config") or {}).get("tenant_id")
         if not tenant:
             return None
         return cid, tenant
+
+    async def revoke_org_grant(
+        self,
+        tenant_id: str,
+        end_user_id: Optional[str] = None,
+        fallback_connection_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Revoke ONE org's Xero grant. A company's stored connection-id often
+        goes stale (Nango mints a new one per reconnect), so this scans the
+        firm's LIVE Xero connections and revokes via whichever still holds the
+        tenant — the stored id is only a last-resort fallback. Firm-scoped via
+        ``end_user_id``."""
+        candidates = await self._live_xero_connection_ids(end_user_id)
+        if fallback_connection_id and fallback_connection_id not in candidates:
+            candidates.append(fallback_connection_id)
+        for cid in candidates:
+            result = await self.action_revoke_connection(cid, tenant_id)
+            if result.get("revoked"):
+                return result
+        return {"revoked": False, "connectionId": None}
 
     # ---------------------------------------------------------------
     # Xero reads

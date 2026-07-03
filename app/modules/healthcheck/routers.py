@@ -335,13 +335,15 @@ async def remove_company(
     tenant = company.xero_tenant_id
 
     revoked = False
-    if forget and conn and tenant:
+    if forget and tenant:
         from app.modules.integrations.service import IntegrationService
 
         integ = IntegrationService()
-        if integ.is_connected(conn, tenant):
-            result = await integ.revoke_xero_org(conn, tenant)
-            revoked = bool(result.get("revoked"))
+        end_user = str(user.user_id) if user.user_id is not None else None
+        result = await integ.revoke_xero_org_grant(
+            tenant, end_user_id=end_user, fallback_connection_id=conn,
+        )
+        revoked = bool(result.get("revoked"))
 
     if company.firm_id is not None and tenant:
         if forget:

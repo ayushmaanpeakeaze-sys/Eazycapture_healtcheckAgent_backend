@@ -323,3 +323,48 @@ async def test_action_revoke_connection_is_best_effort_on_error(monkeypatch):
     monkeypatch.setattr(svc._client, "trigger_action", boom)
     out = await svc.action_revoke_connection("conn-1", "tenant-x")
     assert out == {"revoked": False, "connectionId": None}
+
+
+async def test_revoke_org_grant_scans_live_connections_for_holder(monkeypatch):
+    """The stored connection-id often goes stale, so revoke_org_grant scans the
+    firm's LIVE connections and revokes via whichever actually holds the tenant —
+    NOT just the newest one (which may hold a different set of orgs)."""
+    svc = NangoService()
+
+    async def fake_ids(end_user_id=None):
+        return ["newest-conn", "holder-conn"]  # newest first; newest lacks the tenant
+    monkeypatch.setattr(svc, "_live_xero_connection_ids", fake_ids)
+
+    tried = []
+    async def fake_revoke(connection_id, tenant_id):
+        tried.append(connection_id)
+        if connection_id == "holder-conn":
+            return {"revoked": True, "connectionId": "xero-9"}
+        return {"revoked": False, "connectionId": None}
+    monkeypatch.setattr(svc, "action_revoke_connection", fake_revoke)
+
+    out = await svc.revoke_org_grant("tenant-x", end_user_id="user-1")
+    assert out == {"revoked": True, "connectionId": "xero-9"}
+    assert tried == ["newest-conn", "holder-conn"]  # fell through the newest
+
+
+async def test_revoke_org_grant_uses_stored_conn_as_last_resort(monkeypatch):
+    """When no live connection holds the tenant, the stale stored connection-id is
+    still tried last."""
+    svc = NangoService()
+
+    async def fake_ids(end_user_id=None):
+        return ["live-a"]
+    monkeypatch.setattr(svc, "_live_xero_connection_ids", fake_ids)
+
+    tried = []
+    async def fake_revoke(connection_id, tenant_id):
+        tried.append(connection_id)
+        return {"revoked": connection_id == "stored-stale", "connectionId": connection_id}
+    monkeypatch.setattr(svc, "action_revoke_connection", fake_revoke)
+
+    out = await svc.revoke_org_grant(
+        "tenant-x", end_user_id="user-1", fallback_connection_id="stored-stale",
+    )
+    assert out["revoked"] is True
+    assert tried == ["live-a", "stored-stale"]

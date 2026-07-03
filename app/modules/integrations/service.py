@@ -360,6 +360,22 @@ class IntegrationService:
         returns to allow-access. Leaves other orgs on the same login connected."""
         return await self._nango.action_revoke_connection(connection_id, tenant_id)
 
+    async def revoke_xero_org_grant(
+        self,
+        tenant_id: str,
+        end_user_id: Optional[str] = None,
+        fallback_connection_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Revoke an org's grant via whichever LIVE connection still holds it —
+        the stored connection-id is often stale, so a plain revoke silently
+        no-ops and the org stays greyed as ``Already connected`` in Xero.
+        Firm-scoped by ``end_user_id``."""
+        return await self._nango.revoke_org_grant(
+            tenant_id,
+            end_user_id=end_user_id,
+            fallback_connection_id=fallback_connection_id,
+        )
+
     async def fetch_profit_and_loss(
         self,
         connection_id: str,
