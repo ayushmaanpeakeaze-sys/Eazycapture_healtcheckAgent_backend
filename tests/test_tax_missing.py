@@ -9,7 +9,7 @@ no-VAT-by-nature accounts (wages, depreciation, tax, donations…).
 from datetime import date
 from decimal import Decimal
 
-from app.schemas.transaction import BatchTransaction
+from app.shared.transaction import BatchTransaction
 from app.modules.healthcheck.checks.tax import (
     _find_purchase_tax_missing,
     _find_sales_tax_missing,

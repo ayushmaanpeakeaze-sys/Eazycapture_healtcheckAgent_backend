@@ -16,7 +16,7 @@ from statistics import median
 from typing import Any, Optional  # noqa: F401
 
 from app.modules.healthcheck.checks.base import SettingField
-from app.schemas.transaction import BatchTransaction, FlaggedIssue
+from app.shared.transaction import BatchTransaction, FlaggedIssue
 from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS  # noqa: F401
 from app.modules.healthcheck.engine.shared import (  # noqa: F401
     _account_lines,

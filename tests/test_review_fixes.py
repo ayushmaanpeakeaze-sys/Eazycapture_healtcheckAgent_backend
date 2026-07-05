@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from app.schemas.transaction import BatchLineItem, BatchTransaction
+from app.shared.transaction import BatchLineItem, BatchTransaction
 from app.modules.healthcheck.checks.coding import _find_multi_account_suppliers
 from app.modules.healthcheck.checks.bank import _find_opening_balance_differences
 from app.modules.healthcheck.checks.tax import _find_multi_tax_code_suppliers

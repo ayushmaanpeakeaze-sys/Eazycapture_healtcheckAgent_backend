@@ -17,7 +17,7 @@ from typing import Optional
 
 from app.core.config import settings
 from app.modules.ai.client import get_groq
-from app.schemas.transaction import BatchTransaction, FlaggedIssue
+from app.shared.transaction import BatchTransaction, FlaggedIssue
 from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS
 from app.modules.healthcheck.engine.shared import *  # noqa: F401,F403
 from app.modules.healthcheck.engine.shared import (

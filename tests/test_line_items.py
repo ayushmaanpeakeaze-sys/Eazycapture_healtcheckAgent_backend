@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from app.schemas.transaction import (
+from app.shared.transaction import (
     BatchContext,
     BatchLineItem,
     BatchTransaction,

@@ -771,7 +771,7 @@ def _call_rules_batch(
 
     # Run the rules engine in-process (the pure logic in app/services/healthcheck)
     # rather than over an HTTP hop to the web service, which was fragile.
-    from app.schemas.transaction import BatchHealthCheckRequest
+    from app.shared.transaction import BatchHealthCheckRequest
     from app.modules.healthcheck.engine.orchestrator import run_batch_health_check
 
     flagged: list[dict[str, Any]] = []

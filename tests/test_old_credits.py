@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.modules.healthcheck.tasks import _reshape_xero_to_batch
-from app.schemas.transaction import BatchTransaction
+from app.shared.transaction import BatchTransaction
 from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.healthcheck.engine.deterministic import _check_old_unsettled_credit
 

@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from app.schemas.transaction import (
+from app.shared.transaction import (
     BatchContext,
     BatchHealthCheckRequest,
     BatchTransaction,
@@ -171,7 +171,7 @@ async def run_outbound_demo() -> dict[str, Any]:
     each demo invoice has at least one deliberate issue so the frontend
     can show realistic trapped results without a live backend.
     """
-    from app.schemas.transaction import ChartOfAccount, TaxRate
+    from app.shared.transaction import ChartOfAccount, TaxRate
     from app.core.redis_client import get_redis
 
     # Cache the demo result for a consistent response on every run, since the

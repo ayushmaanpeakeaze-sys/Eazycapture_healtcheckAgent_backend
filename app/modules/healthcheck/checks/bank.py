@@ -14,7 +14,7 @@ from collections import defaultdict  # noqa: F401
 from decimal import Decimal
 
 from app.modules.healthcheck.checks.base import SettingField
-from app.schemas.transaction import BatchTransaction, FlaggedIssue  # noqa: F401
+from app.shared.transaction import BatchTransaction, FlaggedIssue  # noqa: F401
 from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS  # noqa: F401
 from app.modules.healthcheck.engine.shared import _OPEN_BILL_STATUSES  # noqa: F401
 

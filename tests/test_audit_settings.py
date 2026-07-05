@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from app.schemas.transaction import BatchHealthCheckRequest, BatchTransaction
+from app.shared.transaction import BatchHealthCheckRequest, BatchTransaction
 from app.modules.healthcheck.engine import run_batch_health_check
 from app.modules.healthcheck.engine.audit_settings import (
     DEFAULT_SETTINGS,
@@ -201,7 +201,7 @@ def test_multi_account_whitelist_suppresses():
 
 
 async def test_org_vat_gate_skips_tax_missing_end_to_end():
-    from app.schemas.transaction import BatchContext, ChartOfAccount
+    from app.shared.transaction import BatchContext, ChartOfAccount
 
     txns = [_vat_bill("1", "NONE")]   # expense account 400, No VAT
     coa = [ChartOfAccount(code="400", name="Office Expenses", type="EXPENSE")]

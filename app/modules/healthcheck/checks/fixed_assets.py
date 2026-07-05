@@ -11,7 +11,7 @@ Detection logic + tunable settings + registry metadata all live here.
 from __future__ import annotations
 
 from app.modules.healthcheck.checks.base import SettingField
-from app.schemas.transaction import BatchTransaction, FlaggedIssue
+from app.shared.transaction import BatchTransaction, FlaggedIssue
 from app.modules.healthcheck.engine.shared import _account_lines, _EXPENSE_ACCOUNT_TYPES
 
 _FIXED_ASSET_TYPES = frozenset({"FIXED", "FIXEDASSET"})

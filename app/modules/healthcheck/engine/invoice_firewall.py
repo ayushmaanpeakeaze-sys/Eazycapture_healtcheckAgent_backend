@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.modules.ai.invoice_categorize import classify_invoice
-from app.schemas.transaction import InvoicePayload, InvoiceValidationResponse
+from app.shared.transaction import InvoicePayload, InvoiceValidationResponse
 from app.modules.healthcheck.engine.shared import _LLM_MIN_CONFIDENCE
 
 

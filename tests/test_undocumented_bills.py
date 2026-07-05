@@ -5,7 +5,7 @@ Flag only when HasAttachments is explicitly False — never on missing data.
 from datetime import date
 from decimal import Decimal
 
-from app.schemas.transaction import BatchTransaction
+from app.shared.transaction import BatchTransaction
 from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.healthcheck.checks.documents import _find_undocumented_bills
 

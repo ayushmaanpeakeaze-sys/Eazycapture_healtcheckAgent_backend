@@ -11,7 +11,7 @@ import logging
 from datetime import date
 from typing import Awaitable, Callable, Optional
 
-from app.schemas.transaction import (
+from app.shared.transaction import (
     BatchHealthCheckRequest,
     BatchHealthCheckResponse,
     FlaggedIssue,

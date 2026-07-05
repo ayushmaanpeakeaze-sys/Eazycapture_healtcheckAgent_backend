@@ -8,7 +8,7 @@ ACCREC → unapproved_invoice, ACCPAY → unapproved_bill.
 from datetime import date, timedelta
 from decimal import Decimal
 
-from app.schemas.transaction import BatchTransaction
+from app.shared.transaction import BatchTransaction
 from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS
 from app.modules.healthcheck.engine.deterministic import _check_unapproved
 

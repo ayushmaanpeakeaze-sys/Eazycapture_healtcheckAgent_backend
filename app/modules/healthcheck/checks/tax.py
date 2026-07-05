@@ -16,7 +16,7 @@ from collections import defaultdict
 from decimal import Decimal  # noqa: F401  (kept for future use)
 from typing import Optional
 
-from app.schemas.transaction import BatchTransaction, FlaggedIssue
+from app.shared.transaction import BatchTransaction, FlaggedIssue
 from app.modules.healthcheck.engine.shared import (
     _EXPENSE_ACCOUNT_TYPES,
     _MONEY_IN_TYPES,

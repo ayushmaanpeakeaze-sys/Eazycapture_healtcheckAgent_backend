@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.schemas.transaction import InvoicePayload, InvoiceValidationResponse
+from app.shared.transaction import InvoicePayload, InvoiceValidationResponse
 from app.modules.healthcheck.engine import validate_invoice as run_validate_invoice
 
 logger = logging.getLogger("uvicorn.error")

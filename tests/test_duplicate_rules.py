@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from app.schemas.transaction import BatchTransaction
+from app.shared.transaction import BatchTransaction
 from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
 from app.modules.healthcheck.engine.deterministic import (

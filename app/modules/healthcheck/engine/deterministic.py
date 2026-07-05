@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Optional
 
-from app.schemas.transaction import BatchTransaction, FlaggedIssue
+from app.shared.transaction import BatchTransaction, FlaggedIssue
 from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.healthcheck.engine.shared import (
     _CREDIT_DOC_TYPES,

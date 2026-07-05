@@ -9,7 +9,7 @@ import re
 from decimal import Decimal
 from typing import Optional
 
-from app.schemas.transaction import BatchContext, BatchTransaction, FlaggedIssue
+from app.shared.transaction import BatchContext, BatchTransaction, FlaggedIssue
 
 
 def _account_lines(
