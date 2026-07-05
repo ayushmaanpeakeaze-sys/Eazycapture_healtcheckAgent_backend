@@ -18,9 +18,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.endpoints import router as api_router
-from app.api.routers.demo import router as demo_router
+from app.modules.ai.router import router as enrichment_router
 from app.modules.auth.routers import router as auth_router
+from app.modules.healthcheck.batch_router import router as batch_router
+from app.modules.healthcheck.demo_router import router as demo_router
+from app.modules.healthcheck.validation_router import router as validation_router
 from app.core.config import settings
 from app.core.db import dispose_engine
 from app.modules.ai.client import close_groq
@@ -126,7 +128,9 @@ async def unhandled_exception_handler(request: Request, _exc: Exception):
     )
 
 
-app.include_router(api_router)
+app.include_router(validation_router, prefix="/api/v1")
+app.include_router(batch_router, prefix="/api/v1")
+app.include_router(enrichment_router, prefix="/api/v1")
 app.include_router(healthcheck_router)
 app.include_router(insights_router)
 app.include_router(nango_router)
