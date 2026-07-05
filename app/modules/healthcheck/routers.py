@@ -1071,7 +1071,7 @@ async def get_ai_insight(
 
     from app.modules.healthcheck.models import HealthCheckResult
     from app.modules.healthcheck.services.trapped_service import _coerce_ai
-    from app.modules.ai.schemas import EnrichRowRequest, TrappedRow
+    from app.modules.ai.schemas import TrappedRow
     from app.modules.ai import insight_service
 
     row = (

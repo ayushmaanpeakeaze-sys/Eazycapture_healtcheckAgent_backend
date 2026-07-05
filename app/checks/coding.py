@@ -233,16 +233,6 @@ def amount_outlier_flag(candidate: dict) -> FlaggedIssue:
     )
 
 
-def _find_amount_outliers(
-    transactions: list[BatchTransaction],
-    contact_alias: Optional[dict[str, str]] = None,
-) -> list[FlaggedIssue]:
-    return [
-        amount_outlier_flag(candidate)
-        for candidate in find_amount_outlier_candidates(transactions, contact_alias)
-    ]
-
-
 # --- settings + registry -----------------------------------------------------
 SETTING_FIELDS: tuple[SettingField, ...] = (
     SettingField("misallocated_materiality", "Categorisation & Coding", "misallocated_item",

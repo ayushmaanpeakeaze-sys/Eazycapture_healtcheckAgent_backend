@@ -11,7 +11,7 @@ this sweep tops it back up to 15/15 without re-running the audit.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from redis.asyncio import Redis

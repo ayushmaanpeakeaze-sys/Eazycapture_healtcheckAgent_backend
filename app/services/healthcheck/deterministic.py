@@ -6,27 +6,19 @@ orchestrator.
 """
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date
 from decimal import Decimal
-from statistics import median
 from typing import Any, Optional
 
 from app.schemas.transaction import BatchTransaction, FlaggedIssue
 from app.services.healthcheck.audit_settings import AuditSettings
 from app.services.healthcheck.shared import (
-    _account_lines,
-    _allowed_account_types_for_doc,
     _CREDIT_DOC_TYPES,
-    _EXPENSE_ACCOUNT_TYPES,
-    _MONEY_IN_TYPES,
-    _MONEY_OUT_TYPES,
     _OPEN_BILL_STATUSES,
     _PURCHASE_DOC_TYPES,
-    _REVENUE_ACCOUNT_TYPES,
     _SALES_DOC_TYPES,
     _UNAPPROVED_STATUSES,
-    _VAGUE_ACCOUNT_NAME_KEYWORDS,
 )
 
 
