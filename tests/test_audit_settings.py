@@ -12,19 +12,19 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.schemas.transaction import BatchHealthCheckRequest, BatchTransaction
-from app.services.healthcheck import run_batch_health_check
-from app.services.healthcheck.audit_settings import (
+from app.modules.healthcheck.engine import run_batch_health_check
+from app.modules.healthcheck.engine.audit_settings import (
     DEFAULT_SETTINGS,
     AuditSettings,
 )
-from app.services.healthcheck.contact_checks import _duplicate_contacts
+from app.modules.healthcheck.engine.contact_checks import _duplicate_contacts
 from app.modules.healthcheck.checks.coding import (
     _find_multi_account_suppliers,
     find_amount_outlier_candidates,
 )
 from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
 from app.modules.healthcheck.checks.tax import _find_purchase_tax_missing
-from app.services.healthcheck.deterministic import (
+from app.modules.healthcheck.engine.deterministic import (
     _check_old_unpaid,
 )
 
@@ -262,7 +262,7 @@ def test_settings_schema_keys_are_real_fields_no_dupes():
     it's a subset, not the full field set.)"""
     import dataclasses
 
-    from app.services.healthcheck.audit_settings import settings_schema
+    from app.modules.healthcheck.engine.audit_settings import settings_schema
 
     schema_keys = [f["key"] for g in settings_schema() for f in g["fields"]]
     assert len(schema_keys) == len(set(schema_keys)), "a field is mapped twice"
@@ -274,7 +274,7 @@ def test_settings_schema_exposes_duplicate_invoice_tunables():
     """The Duplicate Invoices check exposes its toggles + the Confidence bar
     (in render order). The bar defaults to a high value so only precise
     duplicates show; lowering it reviews weaker matches."""
-    from app.services.healthcheck.audit_settings import settings_schema
+    from app.modules.healthcheck.engine.audit_settings import settings_schema
 
     dup = next(e for e in settings_schema() if e["check"] == "duplicate_invoice")
     assert dup["group"] == "Duplicates"
@@ -292,7 +292,7 @@ def test_settings_schema_exposes_duplicate_invoice_tunables():
 def test_settings_schema_exposes_duplicate_contact_similarity():
     """The Duplicate Contacts check exposes a single name-similarity threshold
     (the 'minimum similarity %'), rendered as a percent slider."""
-    from app.services.healthcheck.audit_settings import settings_schema
+    from app.modules.healthcheck.engine.audit_settings import settings_schema
 
     dc = next(e for e in settings_schema() if e["check"] == "duplicate_contact")
     assert dc["group"] == "Duplicates"
@@ -379,7 +379,7 @@ def test_old_unpaid_age_basis_bad_value_keeps_default():
 
 
 def test_settings_schema_exposes_old_unpaid_invoice_section():
-    from app.services.healthcheck.audit_settings import settings_schema
+    from app.modules.healthcheck.engine.audit_settings import settings_schema
 
     inv = next(e for e in settings_schema() if e["check"] == "old_unpaid_invoice")
     assert inv["group"] == "Date & Ageing"
@@ -396,7 +396,7 @@ def test_settings_schema_groups_and_checks_are_valid():
     can attach the field block to that check's on/off toggle. Field types and
     defaults are well-formed."""
     from app.modules.healthcheck.rules_registry import ALL_RULE_KEYS, _GROUPS
-    from app.services.healthcheck.audit_settings import settings_schema
+    from app.modules.healthcheck.engine.audit_settings import settings_schema
 
     defaults = AuditSettings().as_json_dict()
     valid_types = {"bool", "int", "amount", "multiple", "percent", "list", "select"}

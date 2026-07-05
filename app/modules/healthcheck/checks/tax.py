@@ -17,7 +17,7 @@ from decimal import Decimal  # noqa: F401  (kept for future use)
 from typing import Optional
 
 from app.schemas.transaction import BatchTransaction, FlaggedIssue
-from app.services.healthcheck.shared import (
+from app.modules.healthcheck.engine.shared import (
     _EXPENSE_ACCOUNT_TYPES,
     _MONEY_IN_TYPES,
     _MONEY_OUT_TYPES,
@@ -87,7 +87,7 @@ def _tax_direction_reasons(code: str, net: Optional[Decimal], tax_amt: Optional[
 
 def _settings(settings):
     if settings is None:
-        from app.services.healthcheck.audit_settings import DEFAULT_SETTINGS
+        from app.modules.healthcheck.engine.audit_settings import DEFAULT_SETTINGS
         return DEFAULT_SETTINGS
     return settings
 
@@ -106,7 +106,7 @@ def _find_tax_missing(
 ) -> list[FlaggedIssue]:
     """Tax-missing: a line on an in-scope account (Sales/Income for sales,
     Expense/Asset for purchase) with a No-VAT / Outside-Scope tax code → flag."""
-    from app.services.healthcheck.deterministic import _lines_with_account_and_tax
+    from app.modules.healthcheck.engine.deterministic import _lines_with_account_and_tax
     ignore_codes = frozenset(
         c.strip().upper() for c in (settings.tax_missing_ignore_accounts or ()) if c
     )
@@ -225,7 +225,7 @@ def _find_multi_tax_code_suppliers(
 ) -> list[FlaggedIssue]:
     """Multi-Tax-Code Suppliers: a contact whose postings use MORE THAN ONE
     tax code (2+ distinct → flag), across every line item of bills + Money-Out."""
-    from app.services.healthcheck.deterministic import _contact_key, _dominant, _tax_lines
+    from app.modules.healthcheck.engine.deterministic import _contact_key, _dominant, _tax_lines
     alias = contact_alias or {}
     by_contact: dict[str, list[tuple[BatchTransaction, str]]] = defaultdict(list)
     for tx in transactions:

@@ -17,7 +17,7 @@ from app.schemas.transaction import (
     BatchTransaction,
     ContactDefault,
 )
-from app.services.healthcheck import run_batch_health_check
+from app.modules.healthcheck.engine import run_batch_health_check
 from app.modules.healthcheck.checks.coding import _find_unexpected_accounts
 from app.modules.healthcheck.checks.tax import _find_unexpected_tax_codes
 

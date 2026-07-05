@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.schemas.transaction import BatchTransaction
-from app.services.healthcheck.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.healthcheck.checks.bank import _find_bill_direct_payments
 
 

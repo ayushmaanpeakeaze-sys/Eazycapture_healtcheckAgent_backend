@@ -16,8 +16,8 @@ from app.schemas.transaction import (
     BatchHealthCheckResponse,
     FlaggedIssue,
 )
-from app.services.healthcheck.audit_settings import AuditSettings
-from app.services.healthcheck.shared import (
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.shared import (
     _allowed_tax_codes,
     _BANK_TXN_TYPES,
     _coa_lookup,
@@ -54,7 +54,7 @@ from app.modules.healthcheck.checks.bank import (
     _find_opening_balance_differences,
 )
 from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
-from app.services.healthcheck.deterministic import (
+from app.modules.healthcheck.engine.deterministic import (
     _inspect_transaction,
 )
 from app.modules.ai.checks_llm import (

@@ -17,8 +17,8 @@ from typing import Any, Optional  # noqa: F401
 
 from app.modules.healthcheck.checks.base import SettingField
 from app.schemas.transaction import BatchTransaction, FlaggedIssue
-from app.services.healthcheck.audit_settings import AuditSettings, DEFAULT_SETTINGS  # noqa: F401
-from app.services.healthcheck.shared import (  # noqa: F401
+from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS  # noqa: F401
+from app.modules.healthcheck.engine.shared import (  # noqa: F401
     _account_lines,
     _allowed_account_types_for_doc,
     _CREDIT_DOC_TYPES,
@@ -33,12 +33,12 @@ from app.services.healthcheck.shared import (  # noqa: F401
 
 
 def _contact_key(*a, **k):
-    from app.services.healthcheck.deterministic import _contact_key as _f
+    from app.modules.healthcheck.engine.deterministic import _contact_key as _f
     return _f(*a, **k)
 
 
 def _dominant(*a, **k):
-    from app.services.healthcheck.deterministic import _dominant as _f
+    from app.modules.healthcheck.engine.deterministic import _dominant as _f
     return _f(*a, **k)
 
 

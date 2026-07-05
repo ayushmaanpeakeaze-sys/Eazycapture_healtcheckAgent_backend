@@ -16,10 +16,10 @@ from app.modules.healthcheck.checks.tax import (
     _find_purchase_tax_on_invoices,
     _find_sales_tax_on_bills,
 )
-from app.services.healthcheck.deterministic import (
+from app.modules.healthcheck.engine.deterministic import (
     _inspect_transaction,
 )
-from app.services.healthcheck.shared import _allowed_tax_codes, _tax_direction_map
+from app.modules.healthcheck.engine.shared import _allowed_tax_codes, _tax_direction_map
 
 _CTX = BatchContext(tax_rates=[
     TaxRate(code="INPUT2", name="GST on Expenses",

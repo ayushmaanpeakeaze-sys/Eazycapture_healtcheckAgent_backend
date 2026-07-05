@@ -11,12 +11,12 @@ from __future__ import annotations
 
 from app.modules.healthcheck.checks.base import SettingField
 from app.schemas.transaction import BatchTransaction, FlaggedIssue
-from app.services.healthcheck.shared import _MONEY_OUT_TYPES
+from app.modules.healthcheck.engine.shared import _MONEY_OUT_TYPES
 
 
 def _settings(settings):
     if settings is None:
-        from app.services.healthcheck.audit_settings import DEFAULT_SETTINGS
+        from app.modules.healthcheck.engine.audit_settings import DEFAULT_SETTINGS
         return DEFAULT_SETTINGS
     return settings
 

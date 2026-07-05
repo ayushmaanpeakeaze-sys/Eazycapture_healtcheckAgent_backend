@@ -18,9 +18,9 @@ from typing import Optional
 from app.core.config import settings
 from app.modules.ai.client import get_groq
 from app.schemas.transaction import BatchTransaction, FlaggedIssue
-from app.services.healthcheck.audit_settings import AuditSettings, DEFAULT_SETTINGS
-from app.services.healthcheck.shared import *  # noqa: F401,F403
-from app.services.healthcheck.shared import (
+from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS
+from app.modules.healthcheck.engine.shared import *  # noqa: F401,F403
+from app.modules.healthcheck.engine.shared import (
     _allowed_account_types_for_doc,
     _ASSET_ACCOUNT_TYPES,
     _BATCH_CONCURRENCY,
@@ -622,12 +622,12 @@ async def _llm_anomaly_chunk(
     except Exception:
         # LLM failed → fall back to deterministic amount_outlier for this chunk.
         logger.exception("anomaly LLM chunk failed — using deterministic outlier")
-        from app.services.healthcheck.deterministic import amount_outlier_flag
+        from app.modules.healthcheck.engine.deterministic import amount_outlier_flag
         return [amount_outlier_flag(c) for c in chunk]
 
     results = data.get("results") if isinstance(data, dict) else None
     if not isinstance(results, list):
-        from app.services.healthcheck.deterministic import amount_outlier_flag
+        from app.modules.healthcheck.engine.deterministic import amount_outlier_flag
         return [amount_outlier_flag(c) for c in chunk]
 
     by_id = {int(r["id"]): r for r in results if isinstance(r, dict) and "id" in r}

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.services.healthcheck.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.insights.logic.bank import (
     compute_bank_balance,
     compute_bank_balance_gaps,

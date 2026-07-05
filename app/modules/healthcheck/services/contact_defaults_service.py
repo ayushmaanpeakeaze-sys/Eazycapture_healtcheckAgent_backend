@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.healthcheck.models import Company, HealthCheckResult
 from app.modules.integrations.nango.client import NangoAuthError
 from app.modules.integrations.service import IntegrationService
-from app.services.healthcheck.contact_checks import (
+from app.modules.healthcheck.engine.contact_checks import (
     _DEFAULT_FIELD_TO_XERO,
     extract_contact_defaults,
     missing_contact_defaults,

@@ -22,7 +22,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
-from app.services.healthcheck.audit_settings import AuditSettings, DEFAULT_SETTINGS
+from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS
 
 logger = logging.getLogger("eazycapture.contact_checks")
 

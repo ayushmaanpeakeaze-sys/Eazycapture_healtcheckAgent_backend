@@ -6,8 +6,8 @@ A contact is flagged when its MOST RECENT transaction is older than
 """
 from datetime import date
 
-from app.services.healthcheck.audit_settings import AuditSettings
-from app.services.healthcheck.contact_checks import (
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.contact_checks import (
     _build_last_activity,
     _inactive_contacts,
     run_contact_checks,

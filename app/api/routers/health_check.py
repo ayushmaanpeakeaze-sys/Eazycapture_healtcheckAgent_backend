@@ -18,7 +18,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.modules.healthcheck.services.audit_service import META_FIELD, batch_key
 from app.schemas.transaction import BatchHealthCheckRequest, BatchHealthCheckResponse
-from app.services.healthcheck import run_batch_health_check
+from app.modules.healthcheck.engine import run_batch_health_check
 
 # Deterministic namespace so re-checking the same pre-ledger document_id
 # (which may not be a Xero UUID yet) maps to a stable health_check_result row.

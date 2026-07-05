@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from app.modules.healthcheck.checks.base import SettingField
 from app.schemas.transaction import BatchTransaction, FlaggedIssue
-from app.services.healthcheck.shared import _account_lines, _EXPENSE_ACCOUNT_TYPES
+from app.modules.healthcheck.engine.shared import _account_lines, _EXPENSE_ACCOUNT_TYPES
 
 _FIXED_ASSET_TYPES = frozenset({"FIXED", "FIXEDASSET"})
 _CAPITAL_REVIEW_KEYWORDS = ("repair", "maintenance", "printing", "stationery")
@@ -22,7 +22,7 @@ def _settings(settings):
     """Resolve the default settings lazily — avoids importing audit_settings at
     module load (which would cycle through deterministic)."""
     if settings is None:
-        from app.services.healthcheck.audit_settings import DEFAULT_SETTINGS
+        from app.modules.healthcheck.engine.audit_settings import DEFAULT_SETTINGS
         return DEFAULT_SETTINGS
     return settings
 

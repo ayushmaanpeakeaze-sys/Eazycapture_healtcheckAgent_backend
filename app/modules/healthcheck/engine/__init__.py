@@ -18,9 +18,9 @@ __all__ = ["validate_invoice", "run_batch_health_check"]
 
 def __getattr__(name: str) -> Any:
     if name == "run_batch_health_check":
-        from app.services.healthcheck.orchestrator import run_batch_health_check
+        from app.modules.healthcheck.engine.orchestrator import run_batch_health_check
         return run_batch_health_check
     if name == "validate_invoice":
-        from app.services.healthcheck.invoice_firewall import validate_invoice
+        from app.modules.healthcheck.engine.invoice_firewall import validate_invoice
         return validate_invoice
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

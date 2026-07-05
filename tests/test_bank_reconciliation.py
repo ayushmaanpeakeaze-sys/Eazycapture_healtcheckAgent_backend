@@ -1,5 +1,5 @@
 """Bank Reconciliation Summary — unit tests (pure logic, no infra)."""
-from app.services.healthcheck.bank_reconciliation import (
+from app.modules.healthcheck.engine.bank_reconciliation import (
     compute_bank_reconciliation_summary,
 )
 

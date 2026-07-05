@@ -8,7 +8,7 @@ from app.schemas.transaction import BatchLineItem, BatchTransaction
 from app.modules.healthcheck.checks.coding import _find_multi_account_suppliers
 from app.modules.healthcheck.checks.bank import _find_opening_balance_differences
 from app.modules.healthcheck.checks.tax import _find_multi_tax_code_suppliers
-from app.services.healthcheck.deterministic import (
+from app.modules.healthcheck.engine.deterministic import (
     _build_contact_alias,
     _contact_key,
 )

@@ -5,8 +5,8 @@ The MATCH is driven purely by the normalised contact NAME (≥70% similarity).
 reduced (but still shown) when they differ. tax/bank/email/phone/address/person are
 ENRICHMENT columns only, never part of the score. Nothing is ever auto-merged.
 """
-from app.services.healthcheck.audit_settings import AuditSettings
-from app.services.healthcheck.contact_checks import _duplicate_contacts
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.contact_checks import _duplicate_contacts
 
 
 def _c(cid, name, *, customer=True, supplier=False, tax=None, email=None,

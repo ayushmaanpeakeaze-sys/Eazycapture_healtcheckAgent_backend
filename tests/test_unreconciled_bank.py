@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 from app.modules.healthcheck.services.unreconciled_bank_service import UnreconciledBankService
-from app.services.healthcheck.unreconciled_bank import compute_unreconciled_accounts
+from app.modules.healthcheck.engine.unreconciled_bank import compute_unreconciled_accounts
 
 
 def _txn(acc_id, code, name, kind, reconciled):

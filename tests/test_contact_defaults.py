@@ -17,7 +17,7 @@ from app.modules.healthcheck.models import Company
 from app.modules.healthcheck.services.contact_defaults_service import (
     to_xero_default_fields,
 )
-from app.services.healthcheck.contact_checks import (
+from app.modules.healthcheck.engine.contact_checks import (
     _contact_defaults,
     extract_contact_defaults,
     missing_contact_defaults,

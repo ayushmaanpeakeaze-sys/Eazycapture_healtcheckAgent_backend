@@ -23,8 +23,8 @@ from app.modules.healthcheck.services.company_config import CompanyConfigStore
 from app.modules.healthcheck.xero_links import xero_deep_link
 from app.modules.integrations.nango.client import NangoAuthError
 from app.modules.integrations.service import IntegrationService
-from app.services.healthcheck.audit_settings import AuditSettings
-from app.services.healthcheck.bank_reconciliation import (
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.bank_reconciliation import (
     compute_bank_reconciliation_summary,
 )
 from app.modules.insights.logic.bank import _parse_trial_balance_balances

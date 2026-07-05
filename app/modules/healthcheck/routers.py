@@ -1193,7 +1193,7 @@ async def get_audit_config(
     Configuration screen."""
     from app.modules.healthcheck.models import Company
     from app.modules.healthcheck.rules_registry import rule_catalog, total_checks
-    from app.services.healthcheck.audit_settings import AuditSettings, settings_schema
+    from app.modules.healthcheck.engine.audit_settings import AuditSettings, settings_schema
 
     company = await db.get(Company, company_id)
     cfg = (company.audit_config or {}) if company else {}
@@ -1235,7 +1235,7 @@ async def put_audit_config(
         ALL_RULE_KEYS, rule_catalog, total_checks,
     )
 
-    from app.services.healthcheck.audit_settings import AuditSettings, settings_schema
+    from app.modules.healthcheck.engine.audit_settings import AuditSettings, settings_schema
 
     company = await db.get(Company, company_id)
     if company is None:

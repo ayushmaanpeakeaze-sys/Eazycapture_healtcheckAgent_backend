@@ -9,8 +9,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.schemas.transaction import BatchTransaction
-from app.services.healthcheck.audit_settings import AuditSettings, DEFAULT_SETTINGS
-from app.services.healthcheck.deterministic import _check_unapproved
+from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS
+from app.modules.healthcheck.engine.deterministic import _check_unapproved
 
 _TODAY = date(2026, 6, 24)
 

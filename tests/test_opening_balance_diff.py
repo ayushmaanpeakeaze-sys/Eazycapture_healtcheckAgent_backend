@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
-from app.services.healthcheck.opening_balance import (
+from app.modules.healthcheck.engine.opening_balance import (
     compute_opening_balance_diffs,
     extract_net_assets_from_balance_sheet,
     find_late_transactions,

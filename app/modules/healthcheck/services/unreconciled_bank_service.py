@@ -1,7 +1,7 @@
 """Unreconciled Bank Items — runtime orchestration.
 
 Fetches Xero bank transactions, counts the unreconciled ones per account
-(``app.services.healthcheck.unreconciled_bank``), attaches a Xero "Process"
+(``app.modules.healthcheck.engine.unreconciled_bank``), attaches a Xero "Process"
 deep-link, and honours the per-company exclude list (stored on audit_config).
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ from uuid import UUID
 from app.modules.healthcheck.services.company_config import CompanyConfigStore
 from app.modules.healthcheck.xero_links import xero_deep_link
 from app.modules.integrations.service import IntegrationService
-from app.services.healthcheck.unreconciled_bank import compute_unreconciled_accounts
+from app.modules.healthcheck.engine.unreconciled_bank import compute_unreconciled_accounts
 
 logger = logging.getLogger("eazycapture.unreconciled_bank_service")
 

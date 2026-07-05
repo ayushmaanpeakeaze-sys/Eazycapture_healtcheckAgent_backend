@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from app.modules.ai.invoice_categorize import classify_invoice
 from app.schemas.transaction import InvoicePayload, InvoiceValidationResponse
-from app.services.healthcheck.shared import _LLM_MIN_CONFIDENCE
+from app.modules.healthcheck.engine.shared import _LLM_MIN_CONFIDENCE
 
 
 async def validate_invoice(payload: InvoicePayload) -> InvoiceValidationResponse:

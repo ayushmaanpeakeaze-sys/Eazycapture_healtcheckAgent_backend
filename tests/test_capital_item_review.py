@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.schemas.transaction import BatchLineItem, BatchTransaction
-from app.services.healthcheck.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.healthcheck.checks.fixed_assets import _find_capital_items
 
 # 473 Repairs & 461 Printing are EXPENSE; 710 is FIXED; 200 is REVENUE.

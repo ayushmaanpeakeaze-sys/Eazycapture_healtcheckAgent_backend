@@ -1,6 +1,6 @@
 """Opening Balance Differences — runtime orchestration.
 
-Ties the pure cores (``app.services.healthcheck.opening_balance``) +
+Ties the pure cores (``app.modules.healthcheck.engine.opening_balance``) +
 Companies House integration + manual entries (stored on ``audit_config``) into
 the data the frontend renders:
 
@@ -29,8 +29,8 @@ from app.modules.integrations.companies_house.service import (
 )
 from app.modules.integrations.nango.client import NangoAuthError
 from app.modules.integrations.service import IntegrationService
-from app.services.healthcheck.audit_settings import AuditSettings
-from app.services.healthcheck.opening_balance import (
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.opening_balance import (
     LateTransaction,
     compute_opening_balance_diffs,
     extract_net_assets_from_balance_sheet,

@@ -20,7 +20,7 @@ from app.schemas.transaction import (
     BatchHealthCheckRequest,
     BatchTransaction,
 )
-from app.services.healthcheck import run_batch_health_check
+from app.modules.healthcheck.engine import run_batch_health_check
 
 router = APIRouter(tags=["demo"])
 

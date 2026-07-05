@@ -7,7 +7,7 @@ from typing import Optional
 from app.core.config import settings
 from app.modules.ai.client import get_groq
 from app.schemas.transaction import InvoicePayload
-from app.services.healthcheck.shared import _parse_json_object
+from app.modules.healthcheck.engine.shared import _parse_json_object
 
 logger = logging.getLogger("uvicorn.error")
 

@@ -772,7 +772,7 @@ def _call_rules_batch(
     # Run the rules engine in-process (the pure logic in app/services/healthcheck)
     # rather than over an HTTP hop to the web service, which was fragile.
     from app.schemas.transaction import BatchHealthCheckRequest
-    from app.services.healthcheck.orchestrator import run_batch_health_check
+    from app.modules.healthcheck.engine.orchestrator import run_batch_health_check
 
     flagged: list[dict[str, Any]] = []
     for start in range(0, len(transactions), _AI_BATCH_CHUNK):
@@ -1361,8 +1361,8 @@ def historical_audit_task(
         # --- 6. contact health checks -----------------------------------
         contact_flags: list = []
         if contacts and not dup_only:   # duplicates-only run skips contact checks
-            from app.services.healthcheck.contact_checks import run_contact_checks
-            from app.services.healthcheck.audit_settings import AuditSettings
+            from app.modules.healthcheck.engine.contact_checks import run_contact_checks
+            from app.modules.healthcheck.engine.audit_settings import AuditSettings
             from datetime import date as _date
             # Pass the audited transactions (incl. bank txns) so the inactive
             # check can build each contact's last-activity date + age.

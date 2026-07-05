@@ -9,9 +9,9 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.schemas.transaction import BatchTransaction
-from app.services.healthcheck.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
-from app.services.healthcheck.deterministic import (
+from app.modules.healthcheck.engine.deterministic import (
     _build_contact_alias,
 )
 

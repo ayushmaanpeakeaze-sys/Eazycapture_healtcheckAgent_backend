@@ -11,8 +11,8 @@ from decimal import Decimal
 
 from app.modules.healthcheck.tasks import _reshape_xero_to_batch
 from app.schemas.transaction import BatchTransaction
-from app.services.healthcheck.audit_settings import AuditSettings
-from app.services.healthcheck.deterministic import _check_old_unsettled_credit
+from app.modules.healthcheck.engine.audit_settings import AuditSettings
+from app.modules.healthcheck.engine.deterministic import _check_old_unsettled_credit
 
 _TODAY = date(2026, 6, 25)
 

@@ -15,12 +15,12 @@ from decimal import Decimal
 
 from app.modules.healthcheck.checks.base import SettingField
 from app.schemas.transaction import BatchTransaction, FlaggedIssue  # noqa: F401
-from app.services.healthcheck.audit_settings import AuditSettings, DEFAULT_SETTINGS  # noqa: F401
-from app.services.healthcheck.shared import _OPEN_BILL_STATUSES  # noqa: F401
+from app.modules.healthcheck.engine.audit_settings import AuditSettings, DEFAULT_SETTINGS  # noqa: F401
+from app.modules.healthcheck.engine.shared import _OPEN_BILL_STATUSES  # noqa: F401
 
 
 def _outstanding_amount(*a, **k):
-    from app.services.healthcheck.deterministic import _outstanding_amount as _f
+    from app.modules.healthcheck.engine.deterministic import _outstanding_amount as _f
     return _f(*a, **k)
 
 
