@@ -175,6 +175,10 @@ erDiagram
     invoice ||--o{ invoice_line_item : has
     app_user ||--o{ user_company_access : "assigned"
     app_user ||--o{ notification_log : "sent to"
+    firm ||--o{ notification : "activity feed"
+    firm ||--o{ excluded_tenant : "removed orgs"
+    company ||--o{ score_history : "score snapshots"
+    company ||--o{ client_insight_snapshot : "KPI snapshot"
 
     firm {
         uuid id PK
@@ -301,6 +305,45 @@ erDiagram
         numeric line_amount
         varchar account_code
     }
+
+    excluded_tenant {
+        uuid id PK
+        uuid firm_id FK "firm that removed the org"
+        text xero_tenant_id "the removed org"
+        text name
+        timestamptz created_at
+    }
+
+    score_history {
+        uuid id PK
+        uuid company_id FK
+        int health_score "snapshot value"
+        timestamptz recorded_at
+    }
+
+    notification {
+        uuid id PK
+        uuid firm_id FK "activity-feed scope"
+        text type "invite_sent | org_connected | …"
+        text severity "info | warning | …"
+        text title
+        text detail
+        text actor_email
+        uuid company_id "loose ref (no FK)"
+        timestamptz created_at
+    }
+
+    client_insight_snapshot {
+        uuid id PK
+        uuid company_id FK
+        timestamptz computed_at
+        varchar status "ok | failed"
+        numeric net_profit
+        numeric tax_estimate
+        numeric cash
+        boolean dla_detected
+        jsonb payload "full per-KPI payload"
+    }
 ```
 
 ---
@@ -345,13 +388,15 @@ erDiagram
 | `notification` | firm-scoped in-app activity feed — team + access + connect events (invite sent/accepted, access granted, org connected/removed). |
 | `notification_log` | every email send + delivery status. |
 
+### Insights (KPI snapshots)
+| Table | Purpose |
+|---|---|
+| `client_insight_snapshot` | one row per company holding pre-computed KPIs (net profit, tax estimate, cash, working capital, DLA flags…), refreshed nightly. Key figures are duplicated out of the `payload` JSONB into columns so a firm-wide rollup can filter without unpacking JSON. Outside the audit path. |
+
 ### Legacy / seed
 | Table | Purpose |
 |---|---|
 | `invoice`, `invoice_line_item` | seeded demo data (used when an org has no live Xero connection). The live audit uses `xero_document`. |
-
-> The Insights feature adds a few more tables (`client_insight_snapshot`,
-> `snap_*`) — pre-computed KPI snapshots, outside the audit path.
 
 ---
 
@@ -383,16 +428,314 @@ result = {
 
 ---
 
+## 7. Full column reference (every table)
+
+The complete column list for all 17 tables, grouped by purpose. `id` is always
+a UUID primary key generated app-side (`uuid_pk()` helper). Every tenant-scoped
+table carries `company_id` (or `firm_id`) — there is **no per-org table or
+per-org database**; one shared set of tables, isolated by these columns.
+
+> `Null? = no` means the column is required. `Key`: `PK` = primary key,
+> `FK → x.y` = foreign key. "Loose ref" = a UUID pointer with **no** FK
+> constraint (kept so the row survives the referenced row's deletion).
+
+### Firm / identity
+
+**`firm`** — a workspace; the top-level tenant (one per signup).
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `name` | text | no | | workspace display name |
+| `created_at` | timestamptz | no | | default `now()` |
+
+**`app_user`** (model `User`) — a user; role `admin` or `team_member`.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `firm_id` | uuid | yes | FK → `firm.id` | owning firm (nullable only for legacy backfilled rows) |
+| `email` | text | no | | login email (unique index) |
+| `full_name` | text | yes | | |
+| `role` | varchar(32) | no | | `admin` \| `team_member` (default `team_member`) |
+| `status` | varchar(32) | no | | `invited` \| `active` \| `disabled` (default `invited`) |
+| `company_access_mode` | varchar(16) | no | | `all` \| `selected` (default `selected`) |
+| `password_hash` | text | yes | | null while still invited |
+| `nango_connection_id` | text | yes | | accountant's Nango connection (set on Xero connect) |
+| `invite_token` | text | yes | | one-time invite token, cleared once accepted |
+| `invite_expires_at` | timestamptz | yes | | invite expiry |
+| `invited_by` | uuid | yes | loose ref | who sent the invite |
+| `email_status` | varchar(16) | yes | | latest email delivery status (denormalised) |
+| `created_at` | timestamptz | no | | |
+
+**`user_company_access`** — N:N join: which orgs a `selected`-mode team member can access.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `user_id` | uuid | no | FK → `app_user.id` | the gated team member |
+| `company_id` | uuid | no | FK → `company.id` | org they can access |
+| `created_at` | timestamptz | no | | |
+
+Unique `(user_id, company_id)`. Admins ignore this table (they see every org).
+
+### Tenant + connection
+
+**`company`** — one connected Xero org (the per-org tenant).
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `firm_id` | uuid | yes | FK → `firm.id` | owning firm (nullable only for legacy rows) |
+| `name` | text | no | | org name |
+| `xero_tenant_id` | text | yes | | the Xero org id |
+| `nango_connection_id` | text | yes | | the OAuth grant |
+| `xero_shortcode` | text | yes | | org-scoped code for Xero deep-links |
+| `is_active` | boolean | no | | app-level active flag (default `true`) |
+| `needs_reconnect` | boolean | no | | dead Xero grant → drives the "Reconnect" badge (default `false`) |
+| `audit_config` | jsonb | yes | | per-org settings (disabled rules, bank excludes, marked-ok, manual balances) |
+| `created_at` | timestamptz | no | | |
+
+Unique **partial** `(firm_id, xero_tenant_id)` where both set — natural key is
+(firm, tenant), so a reconnect (new connection_id) still updates the same org.
+
+**`excluded_tenant`** — a Xero org a firm explicitly removed.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `firm_id` | uuid | yes | FK → `firm.id` | firm that removed the org |
+| `xero_tenant_id` | text | no | | the removed org |
+| `name` | text | yes | | org name |
+| `created_at` | timestamptz | no | | |
+
+Unique partial `(firm_id, xero_tenant_id)`. Stops the shared grant from
+resurrecting a removed org; deleting the row ("re-add") lets it return.
+
+### Xero mirror (DB-backed sync)
+
+**`xero_sync_state`** — sync watermark + last-run metadata, per `(company, entity)`.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `entity` | varchar(32) | no | | `invoice` \| `contact` \| … |
+| `watermark_utc` | timestamptz | yes | | max `UpdatedDateUTC` synced (null = never → full sync) |
+| `last_full_sync_at` | timestamptz | yes | | |
+| `last_sync_at` | timestamptz | yes | | |
+| `last_status` | varchar(16) | yes | | `ok` \| `error` \| `in_progress` |
+| `last_error` | text | yes | | |
+| `last_record_count` | integer | no | | rows touched last run (default 0) |
+| `created_at` | timestamptz | no | | |
+| `updated_at` | timestamptz | no | | auto-updates on write |
+
+Unique `(company_id, entity)`.
+
+**`xero_document`** — one mirrored Xero record, raw JSON.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `entity` | varchar(32) | no | | which entity type |
+| `xero_id` | varchar(64) | no | | Xero native id (or natural key for id-less entities) |
+| `raw_json` | jsonb | no | | the complete Xero object, verbatim |
+| `updated_date_utc` | timestamptz | yes | | parsed `UpdatedDateUTC`; drives watermark + ordering |
+| `synced_at` | timestamptz | no | | auto-updates on write |
+
+Unique `(company_id, entity, xero_id)`. Raw JSON (not typed columns) so the
+audit reshapes it exactly like a live payload.
+
+### Audit output + review
+
+**`health_check_result`** — one audit verdict per document (see §6 for the `result` JSONB).
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `document_id` | uuid | no | loose ref | the audited document |
+| `document_type` | varchar(32) | no | | `ACCREC` \| `ACCPAY` \| `CONTACT` \| … |
+| `kind` | varchar(32) | no | | `pre_ledger` \| `post_ledger` \| `preview` |
+| `status` | varchar(32) | no | | `passed` \| `blocked` \| `unavailable` \| `skipped` |
+| `error_msgs` | text | yes | | |
+| `result` | jsonb | no | | flagged items + AI details (default `{}`) — issue types live in `result.rule_ids` |
+| `ran_at` | timestamptz | no | | |
+
+Indexed heavily: GIN on `result`, plus composite `(company_id, ran_at)`,
+`(document_id, ran_at)`, `(company_id, kind, status)`.
+
+**`audit_batch`** — one audit run's status + counters.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `status` | varchar(32) | yes | | `in_progress` \| `completed` \| `failed` |
+| `total` | integer | no | | documents audited (default 0) |
+| `trapped` | integer | no | | flagged count (default 0) |
+| `new_trapped` | integer | no | | newly trapped this run (default 0) |
+| `contacts_total` | integer | no | | contacts audited — score denominator (default 0) |
+| `audit_summary` | jsonb | yes | | summary payload |
+| `ai_enriched_count` | integer | no | | results AI-enriched (default 0) |
+| `ai_enrichment_complete` | boolean | no | | enrichment finished? (default `false`) |
+| `started_at` | timestamptz | no | | |
+| `completed_at` | timestamptz | yes | | |
+
+**`score_history`** — one health-score snapshot per run (so Alerts can show a real drop).
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `health_score` | integer | no | | the snapshot value |
+| `recorded_at` | timestamptz | no | | indexed with `company_id` |
+
+**`bank_note`** — accountant's note on a bank account at a period end. Internal (never sent to Xero).
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `account_code` | varchar(32) | no | | bank account |
+| `period_end` | varchar(16) | no | | period the note applies to |
+| `author_user_id` | uuid | yes | loose ref | note author |
+| `body` | text | no | | note text |
+| `tagged_user_ids` | jsonb | yes | | @-tagged user-ids |
+| `created_at` | timestamptz | no | | |
+
+Indexed `(company_id, account_code, period_end)`.
+
+**`bank_document`** — supporting file for a bank account at a period end. Bytes in-DB.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `account_code` | varchar(32) | no | | bank account |
+| `period_end` | varchar(16) | no | | period the file applies to |
+| `filename` | text | no | | |
+| `content_type` | varchar(128) | no | | MIME type |
+| `size_bytes` | integer | no | | (default 0) |
+| `content` | bytea | no | | the file bytes (swap for S3/GCS at scale) |
+| `uploaded_by` | uuid | yes | loose ref | uploader |
+| `created_at` | timestamptz | no | | |
+
+Indexed `(company_id, account_code, period_end)`.
+
+### Notifications
+
+**`notification`** — firm-scoped in-app activity feed.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `firm_id` | uuid | yes | FK → `firm.id` | feed scope |
+| `type` | text | no | | `invite_sent` \| `invite_accepted` \| `access_granted` \| `org_connected` \| `org_removed` |
+| `severity` | text | no | | (default `info`) |
+| `title` | text | no | | |
+| `detail` | text | yes | | |
+| `actor_email` | text | yes | | who triggered it |
+| `company_id` | uuid | yes | loose ref | so a removal event survives the org's deletion |
+| `created_at` | timestamptz | no | | indexed with `firm_id` |
+
+**`notification_log`** — one row per outbound send; delivery tracking.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `user_id` | uuid | yes | FK → `app_user.id` (SET NULL) | recipient; log survives user removal |
+| `recipient_email` | text | no | | |
+| `channel` | varchar(32) | no | | `email` \| `whatsapp` \| … |
+| `kind` | varchar(48) | no | | `invite` \| `resend_invite` \| … |
+| `status` | varchar(16) | no | | `queued` \| `sent` \| `delivered` \| `bounced` \| `complained` \| `failed` (default `queued`) |
+| `provider` | varchar(48) | yes | | sending provider |
+| `provider_message_id` | text | yes | | for webhook matching |
+| `error` | text | yes | | |
+| `created_at` | timestamptz | no | | |
+| `updated_at` | timestamptz | no | | provider webhook upgrades status here |
+
+### Insights
+
+**`client_insight_snapshot`** — pre-computed KPIs per company (one current row each).
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `computed_at` | timestamptz | no | | when KPIs were computed |
+| `status` | varchar(16) | no | | `ok` \| `failed` (default `ok`) |
+| `error` | text | yes | | message when computation failed |
+| `net_profit` | numeric(16,2) | yes | | ↓ summary columns, mirrored out of `payload` |
+| `tax_estimate` | numeric(16,2) | yes | | |
+| `cash` | numeric(16,2) | yes | | |
+| `cash_coverage` | numeric(10,2) | yes | | |
+| `working_capital` | numeric(16,2) | yes | | |
+| `working_capital_healthy` | boolean | yes | | |
+| `distributable_reserves` | numeric(16,2) | yes | | |
+| `net_asset_value` | numeric(16,2) | yes | | |
+| `dla_detected` | boolean | yes | | director's loan account detected |
+| `dla_overdrawn` | boolean | yes | | director's loan account overdrawn |
+| `payload` | jsonb | no | | full per-KPI payload for instant per-org serve (default `{}`) |
+
+Unique `(company_id)` — one current snapshot per org, upserted nightly.
+
+### Legacy / seed
+
+**`invoice`** — an invoice/bill (seed/demo only; the live audit uses `xero_document`).
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `company_id` | uuid | no | FK → `company.id` | tenant scope |
+| `invoice_number` | text | yes | | |
+| `vendor_name` | text | no | | vendor/contact |
+| `amount` | numeric(12,2) | no | | total |
+| `amount_paid` | numeric(12,2) | yes | | |
+| `amount_due` | numeric(12,2) | yes | | |
+| `issue_date` | date | no | | |
+| `due_date` | date | yes | | |
+| `status` | varchar(32) | no | | `DRAFT` \| `SUBMITTED` \| `AUTHORISED` \| `PAID` \| `VOIDED` \| `DELETED` |
+| `type` | varchar(32) | no | | `ACCREC` \| `ACCPAY` \| `ACCRECCREDIT` \| `ACCPAYCREDIT` |
+| `tax_code` | varchar(32) | yes | | |
+| `account_code` | varchar(32) | yes | | |
+| `reference` | text | yes | | |
+| `currency_code` | varchar(8) | no | | (default `GBP`) |
+| `created_at` | timestamptz | no | | |
+| `updated_at` | timestamptz | no | | auto-updates on write |
+
+Indexed `(company_id, status)`.
+
+**`invoice_line_item`** — one line on a seed `invoice`.
+
+| Column | Type | Null? | Key | Purpose |
+|---|---|---|---|---|
+| `id` | uuid | no | PK | |
+| `invoice_id` | uuid | no | FK → `invoice.id` | owning invoice |
+| `description` | text | yes | | |
+| `quantity` | numeric(12,4) | no | | (default 1) |
+| `unit_amount` | numeric(12,2) | yes | | |
+| `account_code` | varchar(32) | yes | | |
+| `tax_type` | varchar(32) | yes | | |
+| `line_amount` | numeric(12,2) | yes | | |
+
+---
+
 ## Foreign keys
 
 | From | → To | On delete |
 |---|---|---|
 | `company.firm_id` | `firm.id` | CASCADE |
 | `app_user.firm_id` | `firm.id` | CASCADE |
+| `excluded_tenant.firm_id` | `firm.id` | CASCADE |
+| `notification.firm_id` | `firm.id` | CASCADE |
 | `xero_sync_state.company_id` | `company.id` | CASCADE |
 | `xero_document.company_id` | `company.id` | CASCADE |
 | `health_check_result.company_id` | `company.id` | CASCADE |
 | `audit_batch.company_id` | `company.id` | CASCADE |
+| `score_history.company_id` | `company.id` | CASCADE |
+| `client_insight_snapshot.company_id` | `company.id` | CASCADE |
 | `bank_note.company_id` / `bank_document.company_id` | `company.id` | CASCADE |
 | `invoice.company_id` | `company.id` | CASCADE |
 | `invoice_line_item.invoice_id` | `invoice.id` | CASCADE |
