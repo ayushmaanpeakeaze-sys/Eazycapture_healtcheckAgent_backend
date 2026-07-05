@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from app.core.db import SyncSessionLocal
 from app.core.security import hash_password
-from app.modules.healthcheck.models import User
+from app.modules.auth.models import User
 
 
 def main() -> None:
