@@ -190,6 +190,7 @@ erDiagram
         text nango_connection_id "the OAuth grant"
         text xero_shortcode "deep-link code"
         boolean is_active
+        boolean needs_reconnect "dead Xero grant → reconnect badge"
         jsonb audit_config "disabled rules, excludes, marked-ok…"
         timestamptz created_at
     }
@@ -314,7 +315,8 @@ erDiagram
 ### Tenant + connection
 | Table | Purpose |
 |---|---|
-| `company` | one connected Xero org, owned by a `firm` (`firm_id`). Natural key `(nango_connection_id, xero_tenant_id)`. `audit_config` (JSONB) holds per-org settings — disabled rules, bank-account excludes, marked-ok, manual statement balances. |
+| `company` | one connected Xero org, owned by a `firm` (`firm_id`). Natural key `(nango_connection_id, xero_tenant_id)`. `audit_config` (JSONB) holds per-org settings — disabled rules, bank-account excludes, marked-ok, manual statement balances. `needs_reconnect` flags a dead Xero grant (drives the "Reconnect" badge). |
+| `excluded_tenant` | a Xero org a firm explicitly removed. The shared grant covers every org the user can reach, so this row stops the connect webhook from resurrecting a removed org. Deleting the row ("re-add") lets the org return. |
 
 ### Xero mirror (DB-backed sync)
 | Table | Purpose |
@@ -329,6 +331,7 @@ erDiagram
 | `audit_batch` | each audit run's status + counters (total, trapped, contacts_total). |
 | `bank_note` | accountant's notes on a bank account at a period end (Bank Balance Check). Internal — never sent to Xero. |
 | `bank_document` | supporting files (bank statements, spreadsheets) for a bank account at a period end. Bytes stored in-DB. |
+| `score_history` | one health-score snapshot per audit run, so the Alerts feed can show a real drop ("60% → 2%"), not just the current number. |
 
 ### Identity / RBAC
 | Table | Purpose |
@@ -339,6 +342,7 @@ erDiagram
 ### Notifications
 | Table | Purpose |
 |---|---|
+| `notification` | firm-scoped in-app activity feed — team + access + connect events (invite sent/accepted, access granted, org connected/removed). |
 | `notification_log` | every email send + delivery status. |
 
 ### Legacy / seed
