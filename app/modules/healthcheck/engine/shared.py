@@ -5,7 +5,6 @@ Used by both the deterministic rules and the LLM detection passes.
 from __future__ import annotations
 
 import json
-import re
 from decimal import Decimal
 from typing import Optional
 
@@ -29,7 +28,6 @@ logger = __import__("logging").getLogger("uvicorn.error")
 
 _BATCH_CONCURRENCY = 5
 _CATEGORY_CHUNK_SIZE = 10
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 _DUPLICATE_WINDOW_DAYS = 7
 _VENDOR_FUZZ_THRESHOLD = 72
 _LLM_MIN_CONFIDENCE = 0.80
@@ -86,16 +84,6 @@ _EXPENSE_ACCOUNT_TYPES = {
 }
 
 CategoryCacheKey = tuple[str, str, str, str]
-
-def _parse_json_object(raw: str) -> dict:
-    raw = raw.strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        match = _JSON_OBJECT_RE.search(raw)
-        if not match:
-            raise
-        return json.loads(match.group(0))
 
 async def _noop_issues() -> list[FlaggedIssue]:
     """Awaitable that yields no issues — used when an LLM pass is disabled."""

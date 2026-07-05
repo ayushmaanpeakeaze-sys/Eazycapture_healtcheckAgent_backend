@@ -12,10 +12,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from typing import Optional
 
 from app.core.config import settings
+from app.modules.ai._json import _parse_json_object
 from app.modules.ai.client import get_groq
 from app.core.redis_client import get_redis
 from app.modules.ai.facts import (
@@ -45,20 +45,10 @@ _ENRICH_CHUNK_SIZE = 5   # rows packed into one LLM call — amortises the syste
 _BATCH_TOTAL_FIELD = "_meta.ai_enriched_total"
 _BATCH_COUNTER_FIELD = "_meta.ai_enriched_count"
 _BATCH_TTL_SECONDS = 3600
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 _BATCH_HASH_PREFIX = "xero_historical_audit_batch"
 _ROW_KEY_PREFIX = "health_check_ai"
 _BATCH_SUMMARY_FIELD = "_meta.audit_summary"
 _VALID_SEVERITIES = {"critical", "high", "medium", "low"}
-def _parse_json_object(raw: str) -> dict:
-    raw = raw.strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        match = _JSON_OBJECT_RE.search(raw)
-        if not match:
-            raise
-        return json.loads(match.group(0))
 
 
 # =====================================================================

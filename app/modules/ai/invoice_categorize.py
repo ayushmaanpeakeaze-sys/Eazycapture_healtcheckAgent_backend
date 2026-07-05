@@ -5,9 +5,9 @@ import logging
 from typing import Optional
 
 from app.core.config import settings
+from app.modules.ai._json import _parse_json_object
 from app.modules.ai.client import get_groq
 from app.shared.transaction import InvoicePayload
-from app.modules.healthcheck.engine.shared import _parse_json_object
 
 logger = logging.getLogger("uvicorn.error")
 
