@@ -38,37 +38,36 @@ Nango (Xero) · Groq (LLM). Python 3.13.
 
 ## Folder structure
 
-The codebase is a **3-layer architecture** — infrastructure, pure business
-logic, and the web layer are kept separate. This is why the audit engine has
-hundreds of unit tests that run with no server and no database.
+The codebase is **domain-driven**: shared infrastructure in `core/`,
+cross-domain data shapes in `shared/`, and one self-contained folder per domain
+under `modules/`. The audit engine stays pure Python (no web, no DB) so it keeps
+its hundreds of unit tests that run with no server and no database.
 
 ```
 app/
-├── core/        Shared infrastructure
-│                   db.py · config.py · auth.py · celery_app.py ·
-│                   redis_client.py · multi_tenant.py
+├── main.py      FastAPI app — mounts every module's routers under /api/v1
 │
-├── schemas/     Pydantic data shapes (e.g. BatchTransaction)
+├── core/        Shared infrastructure (everything depends on this)
+│                   config.py · db.py · celery_app.py · redis_client.py ·
+│                   auth.py · security.py · multi_tenant.py · rate_limit.py
 │
-├── checks/      The check rules, one module per category
-│                   bank · tax · coding · dates · duplicates · approval ·
-│                   contacts · documents · fixed_assets
+├── shared/      Cross-domain data shapes (transaction.py — BatchTransaction …)
 │
-├── services/    Pure business logic — NO web, NO framework deps
-│   ├── healthcheck/   the audit ENGINE (orchestrator + deterministic checks)
-│   └── insights/      KPI computation
-│
-├── modules/     The web/domain layer — FastAPI routers + DB models + Celery tasks
-│   ├── auth/             firms, users, signup, login, JWT
-│   ├── healthcheck/      audit domain: models, routers, tasks, domain services
-│   ├── integrations/     external systems
-│   │   ├── nango/        our backend's Nango/Xero client (Python)
-│   │   └── sync/         DB-backed incremental Xero sync
-│   ├── ai/              LLM enrichment + insights
-│   ├── insights/        KPI snapshots
-│   └── notifications/   email
-│
-└── api/         The stateless rules/LLM endpoints (e.g. /health-check/batch)
+└── modules/     The domains — each owns its models, routers, tasks, logic
+    ├── auth/            firms, users, signup, login, JWT
+    ├── healthcheck/     the audit domain
+    │   ├── engine/         the ENGINE — orchestrator + deterministic checks (pure, unit-tested)
+    │   ├── checks/         check rules, one module per category
+    │   ├── services/       domain services (panorama, audit dispatch, trapped feed …)
+    │   ├── models.py       DB tables (company, health_check_result, audit_batch …)
+    │   ├── tasks.py        Celery: the historical audit
+    │   └── *_router.py     HTTP routers (validation · batch · demo · health)
+    ├── integrations/    external systems
+    │   ├── nango/          our backend's Nango/Xero client (Python)
+    │   └── sync/           DB-backed incremental Xero sync
+    ├── ai/             LLM enrichment (Groq) + insight generation
+    ├── insights/       KPI snapshots
+    └── notifications/  email + delivery tracking
 
 alembic/         Database migrations
 tests/           Test suite (runs against Postgres + Redis)
@@ -77,8 +76,8 @@ nango-integrations/   Custom Xero Actions (TypeScript) — deployed to Nango (se
 
 **Mental model:**
 - `core` = the skeleton (infra everything depends on).
-- `checks` + `services` = the **brain** — pure audit logic, framework-free, fully unit-tested.
-- `modules` + `api` = the **body** — how the brain is exposed over HTTP, DB and background tasks.
+- `modules/healthcheck/engine` + `checks` = the **brain** — pure audit logic, framework-free, fully unit-tested.
+- the rest of `modules` = the **body** — how the brain is exposed over HTTP, DB and background tasks.
 
 ### Why there are two "nango" folders
 
@@ -229,6 +228,6 @@ platform operator (support / debugging) — it can see every firm.
 make test          # or: .venv/bin/python -m pytest -q
 ```
 
-The audit engine (`app/checks`, `app/services`) is pure Python and tested
-without any server, database, or network. Integration tests for routers,
-multi-tenancy and the sync layer run against Postgres + Redis.
+The audit engine (`app/modules/healthcheck/engine`, `app/modules/healthcheck/checks`)
+is pure Python and tested without any server, database, or network. Integration
+tests for routers, multi-tenancy and the sync layer run against Postgres + Redis.
