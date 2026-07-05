@@ -27,7 +27,7 @@ from app.services.healthcheck.audit_settings import AuditSettings
 from app.services.healthcheck.bank_reconciliation import (
     compute_bank_reconciliation_summary,
 )
-from app.services.insights.bank import _parse_trial_balance_balances
+from app.modules.insights.logic.bank import _parse_trial_balance_balances
 
 logger = logging.getLogger("eazycapture.bank_balance_service")
 

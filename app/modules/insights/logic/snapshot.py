@@ -11,13 +11,13 @@ import asyncio
 from typing import Any, Optional
 
 from app.modules.integrations.service import IntegrationService
-from app.services.insights.balance_sheet import compute_financial_position
-from app.services.insights.bank import compute_bank_balance, compute_bank_reconciliation
-from app.services.insights.cash_health import compute_cash_health
-from app.services.insights.corp_tax import estimate_corporation_tax
-from app.services.insights.directors_loans import find_director_loans
-from app.services.insights.profitability import compute_profitability
-from app.services.insights.sales_tracker import compute_sales_tracker
+from app.modules.insights.logic.balance_sheet import compute_financial_position
+from app.modules.insights.logic.bank import compute_bank_balance, compute_bank_reconciliation
+from app.modules.insights.logic.cash_health import compute_cash_health
+from app.modules.insights.logic.corp_tax import estimate_corporation_tax
+from app.modules.insights.logic.directors_loans import find_director_loans
+from app.modules.insights.logic.profitability import compute_profitability
+from app.modules.insights.logic.sales_tracker import compute_sales_tracker
 
 # how many trailing months of bank balance the Cash Health Check movements show
 _MOVEMENT_PERIODS = 4

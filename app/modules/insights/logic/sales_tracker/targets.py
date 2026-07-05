@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.services.insights.sales_tracker.config import (
+from app.modules.insights.logic.sales_tracker.config import (
     BASIS_AVERAGE_3,
     BASIS_AVERAGE_6,
     BASIS_AVERAGE_12,

@@ -2,7 +2,7 @@
 totals (Xero's API doesn't emit Gross/Net rows)."""
 from __future__ import annotations
 
-from app.services.insights.profitability import compute_profitability
+from app.modules.insights.logic.profitability import compute_profitability
 
 
 def _report():

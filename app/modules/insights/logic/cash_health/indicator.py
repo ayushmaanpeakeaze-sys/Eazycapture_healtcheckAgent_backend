@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.insights.cash_health.config import category_weight
+from app.modules.insights.logic.cash_health.config import category_weight
 
 
 def _rating(score: float) -> str:

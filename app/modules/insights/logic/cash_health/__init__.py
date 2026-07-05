@@ -14,6 +14,6 @@ small and independently testable/debuggable):
 
 Callers import only the package:  ``from ...cash_health import compute_cash_health``
 """
-from app.services.insights.cash_health.cash_health import compute_cash_health
+from app.modules.insights.logic.cash_health.cash_health import compute_cash_health
 
 __all__ = ["compute_cash_health"]

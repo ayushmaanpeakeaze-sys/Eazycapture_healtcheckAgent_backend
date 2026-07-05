@@ -1,8 +1,8 @@
 """Cash Health Check — unit tests for the modular pieces (config, accounts,
 outgoings, indicator, movements) + the orchestrator. Pure logic, no infra."""
-from app.services.insights.cash_health import compute_cash_health
-from app.services.insights.cash_health.accounts import extract_cash_and_liabilities
-from app.services.insights.cash_health.config import (
+from app.modules.insights.logic.cash_health import compute_cash_health
+from app.modules.insights.logic.cash_health.accounts import extract_cash_and_liabilities
+from app.modules.insights.logic.cash_health.config import (
     CORPORATION_TAX,
     CREDIT_CARDS,
     LOANS_OTHER,
@@ -15,9 +15,9 @@ from app.services.insights.cash_health.config import (
     default_category,
     parse_config,
 )
-from app.services.insights.cash_health.indicator import health_indicator
-from app.services.insights.cash_health.movements import compute_movements
-from app.services.insights.cash_health.outgoings import build_outgoings
+from app.modules.insights.logic.cash_health.indicator import health_indicator
+from app.modules.insights.logic.cash_health.movements import compute_movements
+from app.modules.insights.logic.cash_health.outgoings import build_outgoings
 
 
 # --- fixtures ---------------------------------------------------------------

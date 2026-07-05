@@ -1,9 +1,9 @@
 """Sales Tracker — unit tests for the modular pieces (config, targets, analysis)."""
 from datetime import date
 
-from app.services.insights.sales_tracker.analysis import current_month_analysis
-from app.services.insights.sales_tracker.config import parse_config
-from app.services.insights.sales_tracker.targets import compute_targets
+from app.modules.insights.logic.sales_tracker.analysis import current_month_analysis
+from app.modules.insights.logic.sales_tracker.config import parse_config
+from app.modules.insights.logic.sales_tracker.targets import compute_targets
 
 
 # --- config -----------------------------------------------------------------

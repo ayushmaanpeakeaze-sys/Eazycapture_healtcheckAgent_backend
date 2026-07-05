@@ -33,8 +33,8 @@ from app.modules.insights.schemas import (
     SalesTargetConfigModel,
     SnapshotResponse,
 )
-from app.services.insights.cash_health.config import parse_config as parse_cash_health_config
-from app.services.insights.sales_tracker.config import parse_config
+from app.modules.insights.logic.cash_health.config import parse_config as parse_cash_health_config
+from app.modules.insights.logic.sales_tracker.config import parse_config
 from app.modules.insights.tasks import refresh_company_snapshot
 
 _CASH_TIGHT = 0.2   # coverage below this = "cash tight" (firm rollup flag)

@@ -2,7 +2,7 @@
 from the BankTransactions IsReconciled flag."""
 from __future__ import annotations
 
-from app.services.insights.bank import compute_bank_reconciliation
+from app.modules.insights.logic.bank import compute_bank_reconciliation
 
 
 def _txn(date_ms, reconciled, total="100.00"):

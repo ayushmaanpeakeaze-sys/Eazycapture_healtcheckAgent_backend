@@ -17,7 +17,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
-from app.services.insights.cash_health.config import (
+from app.modules.insights.logic.cash_health.config import (
     CashHealthConfig,
     default_category,
 )

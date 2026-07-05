@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from app.services.insights.bank import (
+from app.modules.insights.logic.bank import (
     _is_reconciled,
     _num,
     _parse_date,

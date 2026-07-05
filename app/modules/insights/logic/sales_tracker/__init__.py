@@ -11,6 +11,6 @@ small and independently testable/debuggable):
 
 Callers import only the package:  ``from ...sales_tracker import compute_sales_tracker``
 """
-from app.services.insights.sales_tracker.tracker import compute_sales_tracker
+from app.modules.insights.logic.sales_tracker.tracker import compute_sales_tracker
 
 __all__ = ["compute_sales_tracker"]

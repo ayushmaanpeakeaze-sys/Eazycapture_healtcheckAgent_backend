@@ -1,8 +1,8 @@
 """Corporation-tax estimate (UK bands) + Directors'-loan auto-detect."""
 from __future__ import annotations
 
-from app.services.insights.corp_tax import estimate_corporation_tax
-from app.services.insights.directors_loans import find_director_loans
+from app.modules.insights.logic.corp_tax import estimate_corporation_tax
+from app.modules.insights.logic.directors_loans import find_director_loans
 
 
 # --- Corporation tax (FY2023+ UK rules) ------------------------------------

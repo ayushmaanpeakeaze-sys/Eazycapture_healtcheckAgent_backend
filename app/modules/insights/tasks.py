@@ -22,7 +22,7 @@ from app.core.db import SyncSessionLocal
 from app.modules.healthcheck.models import AuditBatch, Company, HealthCheckResult
 from app.modules.healthcheck.services.panorama_service import _compute_health_score
 from app.modules.insights.models import ClientInsightSnapshot
-from app.services.insights.snapshot import compute_company_snapshot
+from app.modules.insights.logic.snapshot import compute_company_snapshot
 
 logger = logging.getLogger("eazycapture.insights.tasks")
 

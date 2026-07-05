@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.insights.cash_health.config import (
+from app.modules.insights.logic.cash_health.config import (
     CATEGORY_LABELS,
     CATEGORY_ORDER,
     CORPORATION_TAX,

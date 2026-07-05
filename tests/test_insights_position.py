@@ -1,8 +1,8 @@
 """Balance-sheet + sales-tracker insight calculators (pure)."""
 from __future__ import annotations
 
-from app.services.insights.balance_sheet import compute_financial_position
-from app.services.insights.sales_tracker import compute_sales_tracker
+from app.modules.insights.logic.balance_sheet import compute_financial_position
+from app.modules.insights.logic.sales_tracker import compute_sales_tracker
 
 
 def _bs():

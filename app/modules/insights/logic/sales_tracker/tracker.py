@@ -7,11 +7,11 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
-from app.services.insights.profitability import compute_profitability
-from app.services.insights.sales_tracker.analysis import current_month_analysis
-from app.services.insights.sales_tracker.chart import build_chart
-from app.services.insights.sales_tracker.config import parse_config
-from app.services.insights.sales_tracker.targets import compute_targets
+from app.modules.insights.logic.profitability import compute_profitability
+from app.modules.insights.logic.sales_tracker.analysis import current_month_analysis
+from app.modules.insights.logic.sales_tracker.chart import build_chart
+from app.modules.insights.logic.sales_tracker.config import parse_config
+from app.modules.insights.logic.sales_tracker.targets import compute_targets
 
 
 def compute_sales_tracker(
