@@ -1,4 +1,4 @@
-# System Workflow — EazyCapture AI Agent ("Xenon Connect")
+# System Workflow — EazyCapture AI Agent
 
 How the whole thing runs: what boots first, where data comes from, how a
 request flows, and how Redis + Celery move the heavy work off the request path.
