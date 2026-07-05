@@ -7,7 +7,7 @@ settings + registry entries live here.
 """
 from __future__ import annotations
 
-from app.checks.base import SettingField
+from app.modules.healthcheck.checks.base import SettingField
 
 SETTING_FIELDS: tuple[SettingField, ...] = (
     SettingField("old_unpaid_invoice_days", "Date & Ageing", "old_unpaid_invoice",

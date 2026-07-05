@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from app.schemas.transaction import BatchLineItem, BatchTransaction
 from app.services.healthcheck.audit_settings import AuditSettings
-from app.checks.fixed_assets import _find_capital_items
+from app.modules.healthcheck.checks.fixed_assets import _find_capital_items
 
 # 473 Repairs & 461 Printing are EXPENSE; 710 is FIXED; 200 is REVENUE.
 _TYPES = {"473": "EXPENSE", "461": "OVERHEADS", "710": "FIXED", "200": "REVENUE",

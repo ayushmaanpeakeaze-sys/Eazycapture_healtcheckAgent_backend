@@ -252,7 +252,7 @@ DEFAULT_SETTINGS = AuditSettings()
 #   select    → one of ``options`` (a dropdown)
 # SettingField lives in app/checks/base.py (neutral module) to avoid a circular
 # import; re-exported here for existing ``from audit_settings import SettingField``.
-from app.checks.base import (  # noqa: E402
+from app.modules.healthcheck.checks.base import (  # noqa: E402
     SettingField,
     collect_category_setting_fields,
 )

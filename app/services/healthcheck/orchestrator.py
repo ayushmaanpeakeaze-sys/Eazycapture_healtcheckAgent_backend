@@ -27,12 +27,12 @@ from app.services.healthcheck.shared import (
     _noop_issues,
     _tax_direction_map,
 )
-from app.checks.documents import _find_undocumented_bills
-from app.checks.fixed_assets import (
+from app.modules.healthcheck.checks.documents import _find_undocumented_bills
+from app.modules.healthcheck.checks.fixed_assets import (
     _find_capital_items,
     _find_low_cost_fixed_assets,
 )
-from app.checks.coding import (
+from app.modules.healthcheck.checks.coding import (
     _find_direction_mismatches,
     _find_misallocated_items,
     _find_multi_account_suppliers,
@@ -40,7 +40,7 @@ from app.checks.coding import (
     amount_outlier_flag,
     find_amount_outlier_candidates,
 )
-from app.checks.tax import (
+from app.modules.healthcheck.checks.tax import (
     _find_multi_tax_code_suppliers,
     _find_purchase_tax_missing,
     _find_purchase_tax_on_invoices,
@@ -48,12 +48,12 @@ from app.checks.tax import (
     _find_sales_tax_on_bills,
     _find_unexpected_tax_codes,
 )
-from app.checks.bank import (
+from app.modules.healthcheck.checks.bank import (
     _find_bill_direct_payments,
     _find_invoice_direct_deposits,
     _find_opening_balance_differences,
 )
-from app.checks.duplicates import _find_duplicate_bills
+from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
 from app.services.healthcheck.deterministic import (
     _inspect_transaction,
 )

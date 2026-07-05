@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from app.schemas.transaction import BatchLineItem, BatchTransaction
 from app.services.healthcheck.audit_settings import AuditSettings
-from app.checks.fixed_assets import _find_low_cost_fixed_assets
+from app.modules.healthcheck.checks.fixed_assets import _find_low_cost_fixed_assets
 
 _TYPES = {"710": "FIXED", "200": "REVENUE", "400": "EXPENSE"}
 _NAMES = {"710": "Computer Equipment", "400": "Office Expenses"}

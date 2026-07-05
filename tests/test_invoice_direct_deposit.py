@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from app.schemas.transaction import BatchTransaction
 from app.services.healthcheck.audit_settings import AuditSettings
-from app.checks.bank import _find_invoice_direct_deposits
+from app.modules.healthcheck.checks.bank import _find_invoice_direct_deposits
 
 
 def _inv(tid, cid, due, d=date(2026, 6, 1), amount=None, desc="Consulting - INV-100"):

@@ -5,7 +5,7 @@ Missing vendor, missing contact defaults, inactive contacts. Detection lives in
 """
 from __future__ import annotations
 
-from app.checks.base import SettingField
+from app.modules.healthcheck.checks.base import SettingField
 
 SETTING_FIELDS: tuple[SettingField, ...] = (
     SettingField("inactive_days", "Contacts", "inactive_contact",

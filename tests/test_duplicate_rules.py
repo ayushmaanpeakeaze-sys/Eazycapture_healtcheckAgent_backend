@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from app.schemas.transaction import BatchTransaction
 from app.services.healthcheck.audit_settings import AuditSettings
-from app.checks.duplicates import _find_duplicate_bills
+from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
 from app.services.healthcheck.deterministic import (
     _build_contact_alias,
 )

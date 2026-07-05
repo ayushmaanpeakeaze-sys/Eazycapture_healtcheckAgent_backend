@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from app.schemas.transaction import BatchLineItem, BatchTransaction
 from app.services.healthcheck.audit_settings import AuditSettings
-from app.checks.coding import _find_misallocated_items
+from app.modules.healthcheck.checks.coding import _find_misallocated_items
 
 # 429 is a vague account by NAME; 420 is specific.
 _COA = {

@@ -12,7 +12,7 @@ from app.schemas.transaction import (
     BatchTransaction,
     TaxRate,
 )
-from app.checks.tax import (
+from app.modules.healthcheck.checks.tax import (
     _find_purchase_tax_on_invoices,
     _find_sales_tax_on_bills,
 )

@@ -15,7 +15,7 @@ from decimal import Decimal  # noqa: F401
 from statistics import median
 from typing import Any, Optional  # noqa: F401
 
-from app.checks.base import SettingField
+from app.modules.healthcheck.checks.base import SettingField
 from app.schemas.transaction import BatchTransaction, FlaggedIssue
 from app.services.healthcheck.audit_settings import AuditSettings, DEFAULT_SETTINGS  # noqa: F401
 from app.services.healthcheck.shared import (  # noqa: F401

@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from app.schemas.transaction import BatchTransaction
 from app.services.healthcheck.audit_settings import AuditSettings
-from app.checks.documents import _find_undocumented_bills
+from app.modules.healthcheck.checks.documents import _find_undocumented_bills
 
 
 def _bill(tid, has_attach=False, amount="100", dtype="ACCPAY",

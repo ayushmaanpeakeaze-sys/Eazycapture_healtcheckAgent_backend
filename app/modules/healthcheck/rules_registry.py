@@ -12,15 +12,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.checks.approval import META as _APPROVAL_META
-from app.checks.bank import META as _BANK_META
-from app.checks.coding import META as _CODING_META
-from app.checks.contacts import META as _CONTACTS_META
-from app.checks.dates import META as _DATES_META
-from app.checks.documents import META as _DOCUMENTS_META
-from app.checks.duplicates import META as _DUPLICATES_META
-from app.checks.fixed_assets import META as _FIXED_ASSETS_META
-from app.checks.tax import META as _TAX_META
+from app.modules.healthcheck.checks.approval import META as _APPROVAL_META
+from app.modules.healthcheck.checks.bank import META as _BANK_META
+from app.modules.healthcheck.checks.coding import META as _CODING_META
+from app.modules.healthcheck.checks.contacts import META as _CONTACTS_META
+from app.modules.healthcheck.checks.dates import META as _DATES_META
+from app.modules.healthcheck.checks.documents import META as _DOCUMENTS_META
+from app.modules.healthcheck.checks.duplicates import META as _DUPLICATES_META
+from app.modules.healthcheck.checks.fixed_assets import META as _FIXED_ASSETS_META
+from app.modules.healthcheck.checks.tax import META as _TAX_META
 
 # group → list of (key, label, built)
 _GROUPS: dict[str, list[tuple[str, str, bool]]] = {

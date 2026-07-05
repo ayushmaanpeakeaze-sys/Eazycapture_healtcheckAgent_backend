@@ -52,6 +52,6 @@ def collect_category_setting_fields() -> tuple[SettingField, ...]:
 
     out: list[SettingField] = []
     for name in _CATEGORY_MODULES:
-        mod = importlib.import_module(f"app.checks.{name}")
+        mod = importlib.import_module(f"app.modules.healthcheck.checks.{name}")
         out.extend(getattr(mod, "SETTING_FIELDS", ()))
     return tuple(out)

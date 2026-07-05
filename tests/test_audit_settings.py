@@ -18,12 +18,12 @@ from app.services.healthcheck.audit_settings import (
     AuditSettings,
 )
 from app.services.healthcheck.contact_checks import _duplicate_contacts
-from app.checks.coding import (
+from app.modules.healthcheck.checks.coding import (
     _find_multi_account_suppliers,
     find_amount_outlier_candidates,
 )
-from app.checks.duplicates import _find_duplicate_bills
-from app.checks.tax import _find_purchase_tax_missing
+from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
+from app.modules.healthcheck.checks.tax import _find_purchase_tax_missing
 from app.services.healthcheck.deterministic import (
     _check_old_unpaid,
 )
