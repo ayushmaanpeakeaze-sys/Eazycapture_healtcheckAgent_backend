@@ -290,9 +290,12 @@ _CROSS_NAME_WEIGHT = 35     # max points from name similarity (the party signal)
 _CROSS_AMOUNT_POINTS = 35   # same amount — the blocking anchor, always present
 _CROSS_SAMEDAY_POINTS = 25
 _CROSS_WINDOW_POINTS = 15   # within the date window but not same day
-_CROSS_REFERENCE_POINTS = 15
-_CROSS_NUMBER_POINTS = 15
-_CROSS_DESCRIPTION_POINTS = 10
+# The document's identifying number is the invoice number for a sales invoice
+# but the supplier REFERENCE for a bill (bills carry no number of their own).
+# Matching it is the strong "same document" signal; the other field is weak.
+_CROSS_IDENTIFIER_POINTS = 25
+_CROSS_SECONDARY_POINTS = 10
+_CROSS_DESCRIPTION_POINTS = 5
 
 
 def _find_cross_contact_duplicates(
@@ -334,6 +337,7 @@ def _find_cross_contact_duplicates(
         if len(group) < 2:
             continue
         is_credit_pair = doc_type in _CREDIT_DOC_TYPES
+        is_purchase = doc_type in _PURCHASE_DOC_TYPES
         issue_type = _dup_issue_type(doc_type)
         group.sort(key=lambda t: t.date)
         for idx, a in enumerate(group):
@@ -370,14 +374,21 @@ def _find_cross_contact_duplicates(
                 same_invoice_number = bool(na and nb and na == nb)
                 da, db = (a.description or "").strip().lower(), (b.description or "").strip().lower()
                 same_description = bool(da and db and da == db)
+                # A bill's identifying number IS its reference; a sales invoice's is
+                # its invoice number. Matching that is the strong "same document"
+                # signal; the other field is weak corroboration.
+                if is_purchase:
+                    same_identifier, same_secondary = same_reference, same_invoice_number
+                else:
+                    same_identifier, same_secondary = same_invoice_number, same_reference
 
                 points = _CROSS_AMOUNT_POINTS
                 points += round(name_sim * _CROSS_NAME_WEIGHT)
                 points += _CROSS_SAMEDAY_POINTS if days_apart == 0 else _CROSS_WINDOW_POINTS
-                if same_reference:
-                    points += _CROSS_REFERENCE_POINTS
-                if same_invoice_number:
-                    points += _CROSS_NUMBER_POINTS
+                if same_identifier:
+                    points += _CROSS_IDENTIFIER_POINTS
+                if same_secondary:
+                    points += _CROSS_SECONDARY_POINTS
                 if same_description:
                     points += _CROSS_DESCRIPTION_POINTS
                 confidence = min(points, 100) / 100.0

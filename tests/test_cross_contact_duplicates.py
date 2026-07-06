@@ -68,6 +68,31 @@ def test_strong_content_flags_despite_different_name():
     assert len(hits) == 2
 
 
+# --- identifier is doc-type aware (bill=reference, sales=invoice number) -----
+
+def test_bill_reference_is_the_identifier():
+    # A bill carries no invoice number of its own — the supplier REFERENCE is its
+    # number, so a matching reference is the strong "same document" signal.
+    hits = _find_cross_contact_duplicates([
+        _doc("B1", "C1", ref="SUP-9", vendor="Acme", typ="ACCPAY"),
+        _doc("B2", "C2", ref="SUP-9", vendor="Acme Traders", typ="ACCPAY"),
+    ])
+    assert len(hits) == 2
+
+
+def test_sales_reference_alone_is_weak():
+    # Hamilton/Rex case: two SALES invoices whose reference matches but whose
+    # invoice numbers (the real identifier) differ, under different names → the
+    # reference counts only as weak corroboration, so it stays under the bar.
+    hits = _find_cross_contact_duplicates([
+        _doc("S1", "C1", ref="R-9", number="INV-1", desc="a",
+             vendor="Hamilton Smith Ltd", typ="ACCREC"),
+        _doc("S2", "C2", ref="R-9", number="INV-2", desc="a",
+             vendor="Rex Media Group", typ="ACCREC"),
+    ])
+    assert hits == []
+
+
 # --- party by VAT ------------------------------------------------------------
 
 def test_different_vat_skipped_even_if_name_and_content_match():
