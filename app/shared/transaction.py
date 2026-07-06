@@ -171,6 +171,10 @@ class BatchContext(_StrictBase):
     # Pairs of ContactIDs flagged as likely the same contact. Lets duplicate
     # detection treat them as one ledger and catch cross-contact duplicates.
     duplicate_contact_pairs: list[list[str]] = Field(default_factory=list)
+    # ContactID → VAT/tax number. Cross-contact duplicate detection uses it as
+    # the party tiebreaker: same VAT confirms same company, different VAT rules
+    # the pair out. Empty when a contact has no VAT (then it falls back to name).
+    contact_vat: dict[str, str] = Field(default_factory=dict)
 
 
 class BatchHealthCheckRequest(_StrictBase):

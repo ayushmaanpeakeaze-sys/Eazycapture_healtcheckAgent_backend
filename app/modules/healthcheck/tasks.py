@@ -721,6 +721,7 @@ def _build_context(
     base_currency: Optional[str] = None,
     duplicate_contact_pairs: Optional[list[list[str]]] = None,
     contact_defaults: Optional[list[dict[str, Any]]] = None,
+    contact_vat: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
     ctx: dict[str, Any] = {
         "chart_of_accounts": coa or HARDCODED_CHART_OF_ACCOUNTS,
@@ -730,6 +731,8 @@ def _build_context(
     }
     if contact_defaults:
         ctx["contact_defaults"] = contact_defaults
+    if contact_vat:
+        ctx["contact_vat"] = contact_vat
     return ctx
 
 
@@ -760,6 +763,7 @@ def _call_rules_batch(
         base_currency=(org_ctx or {}).get("base_currency"),
         duplicate_contact_pairs=(org_ctx or {}).get("duplicate_contact_pairs"),
         contact_defaults=(org_ctx or {}).get("contact_defaults"),
+        contact_vat=(org_ctx or {}).get("contact_vat"),
     )
     cfg = audit_config or {}
     disabled_rules = cfg.get("disabled_rules") or []
@@ -1266,10 +1270,14 @@ def historical_audit_task(
             # Only contacts with at least one saved default are sent.
             try:
                 defaults = []
+                vat_map: dict[str, str] = {}
                 for c in contacts:
                     cid = (c.get("ContactID") or "").strip()
                     if not cid:
                         continue
+                    vat = (c.get("TaxNumber") or "").strip()
+                    if vat:
+                        vat_map[cid] = vat
                     sales = (c.get("SalesDefaultAccountCode") or "").strip() or None
                     purch = (c.get("PurchasesDefaultAccountCode") or "").strip() or None
                     sales_tax = (c.get("AccountsReceivableTaxType") or "").strip() or None
@@ -1284,6 +1292,8 @@ def historical_audit_task(
                         })
                 if defaults:
                     org_ctx["contact_defaults"] = defaults
+                if vat_map:
+                    org_ctx["contact_vat"] = vat_map
             except Exception:
                 logger.exception(
                     "[SuHe][Audit] contact-defaults computation failed — "

@@ -34,6 +34,16 @@ def _is_paid(*a, **k):
     return _f(*a, **k)
 
 
+def _name_similarity(*a, **k):
+    from app.modules.healthcheck.engine.contact_checks import _name_similarity as _f
+    return _f(*a, **k)
+
+
+def _norm_contact_name(*a, **k):
+    from app.modules.healthcheck.engine.contact_checks import _norm_contact_name as _f
+    return _f(*a, **k)
+
+
 _RECUR_MIN_SERIES = 3      # need >= 3 in the series to learn a cadence
 
 
@@ -269,6 +279,182 @@ def _find_duplicate_bills(
                         duplicate_of_invoice_number=(partner.invoice_number or "").strip() or None,
                         duplicate_of_date=partner.date,
                         this_is_likely_original=(is_orig if is_confirmed_dup else None),
+                        match_reasons=match_reasons,
+                    ))
+
+    flagged.sort(key=lambda f: f.confidence or 0.0, reverse=True)
+    return flagged
+
+
+_CROSS_NAME_WEIGHT = 35     # max points from name similarity (the party signal)
+_CROSS_AMOUNT_POINTS = 35   # same amount — the blocking anchor, always present
+_CROSS_SAMEDAY_POINTS = 25
+_CROSS_WINDOW_POINTS = 15   # within the date window but not same day
+_CROSS_REFERENCE_POINTS = 15
+_CROSS_NUMBER_POINTS = 15
+_CROSS_DESCRIPTION_POINTS = 10
+
+
+def _find_cross_contact_duplicates(
+    transactions: list[BatchTransaction],
+    contact_vat: Optional[dict[str, str]] = None,
+    settings: AuditSettings = DEFAULT_SETTINGS,
+) -> list[FlaggedIssue]:
+    """Content-based duplicate detection ACROSS different contacts.
+
+    Complements ``_find_duplicate_bills`` (per-ContactID, left untouched). The same
+    document recorded under two contact records — a supplier saved twice as
+    "Peakvisory" and "Peakvisory Limited" — never shares a ContactID, so the
+    per-contact pass can't see it.
+
+    Blocks by (document type, amount) so only same-total documents are compared
+    (near-linear; contact count is irrelevant). Amount is the anchor here, so the
+    per-contact ``duplicate_require_same_amount`` toggle does not apply — without a
+    contact anchor there is nothing else to bound the comparison.
+
+    The two contacts being the same party is judged first by VAT
+    (``contact_vat``: ContactID → VAT number) when BOTH have one — same VAT
+    confirms, different VAT means different companies and the pair is skipped
+    outright. When a VAT is missing it falls back to name similarity. That party
+    signal is then just one input to a multi-signal score (same date, same
+    reference, same invoice number, same description) — none decides alone, so two
+    unrelated parties who merely share an amount (both spent £400) fall under the
+    confidence bar. Always review tier with ``cross_contact`` set.
+    """
+    vat_map = contact_vat or {}
+    by_amount: dict[tuple[str, Any], list[BatchTransaction]] = defaultdict(list)
+    for tx in transactions:
+        doc_type = (tx.type or "").strip().upper()
+        if not doc_type or tx.amount is None:
+            continue
+        by_amount[(doc_type, tx.amount)].append(tx)
+
+    flagged: list[FlaggedIssue] = []
+    for (doc_type, amount), group in by_amount.items():
+        if len(group) < 2:
+            continue
+        is_credit_pair = doc_type in _CREDIT_DOC_TYPES
+        issue_type = _dup_issue_type(doc_type)
+        group.sort(key=lambda t: t.date)
+        for idx, a in enumerate(group):
+            for b in group[idx + 1:]:
+                days_apart = (b.date - a.date).days
+                if days_apart > settings.duplicate_days_window:
+                    break  # sorted → every later b is further still
+                # Same-contact pairs belong to _find_duplicate_bills.
+                if _contact_key(a) == _contact_key(b):
+                    continue
+                if (not settings.duplicate_also_check_paid
+                        and _is_paid(a) and _is_paid(b) and not is_credit_pair):
+                    continue
+
+                # --- party signal: VAT decides when both have it, else name ---
+                vat_a = (vat_map.get((a.contact_id or "").strip()) or "").strip()
+                vat_b = (vat_map.get((b.contact_id or "").strip()) or "").strip()
+                if vat_a and vat_b:
+                    if vat_a != vat_b:
+                        continue  # different VAT → different companies → skip
+                    name_sim = 1.0            # same VAT → certainly the same party
+                    party_by = "vat"
+                else:
+                    name_sim = _name_similarity(
+                        _norm_contact_name(a.vendor_name or ""),
+                        _norm_contact_name(b.vendor_name or ""),
+                    )
+                    party_by = "name"
+
+                # --- multi-signal score: no single signal decides ---
+                ra, rb = (a.reference or "").strip(), (b.reference or "").strip()
+                same_reference = bool(ra and rb and ra == rb)
+                na, nb = (a.invoice_number or "").strip(), (b.invoice_number or "").strip()
+                same_invoice_number = bool(na and nb and na == nb)
+                da, db = (a.description or "").strip().lower(), (b.description or "").strip().lower()
+                same_description = bool(da and db and da == db)
+
+                points = _CROSS_AMOUNT_POINTS
+                points += round(name_sim * _CROSS_NAME_WEIGHT)
+                points += _CROSS_SAMEDAY_POINTS if days_apart == 0 else _CROSS_WINDOW_POINTS
+                if same_reference:
+                    points += _CROSS_REFERENCE_POINTS
+                if same_invoice_number:
+                    points += _CROSS_NUMBER_POINTS
+                if same_description:
+                    points += _CROSS_DESCRIPTION_POINTS
+                confidence = min(points, 100) / 100.0
+                if confidence < settings.duplicate_min_confidence:
+                    continue
+
+                one_paid_one_out = _is_paid(a) != _is_paid(b)
+                currency = (a.currency_code or "GBP").strip().upper()
+                symbol = "£" if currency == "GBP" else f"{currency} "
+                match_reasons = {
+                    "same_contact": False,
+                    "cross_contact": True,
+                    "same_amount": True,
+                    "amount": f"{amount:.2f}",
+                    "currency": currency,
+                    "days_apart": days_apart,
+                    "party_by": party_by,
+                    "name_similarity": round(name_sim, 2),
+                    "same_reference": same_reference,
+                    "same_invoice_number": same_invoice_number,
+                    "same_description": same_description,
+                    "confidence": confidence,
+                    "review": True,
+                    "tier": "review",
+                    "one_paid_one_outstanding": one_paid_one_out,
+                    "risk": "high" if one_paid_one_out else "normal",
+                }
+                # Spell out what lined up and what didn't, plus how the two contacts
+                # were matched — so a weak match reads as "check this", not a
+                # confirmed duplicate. The granular flags also live in match_reasons.
+                matched = ["amount"]
+                if days_apart == 0:
+                    matched.append("date")
+                if same_reference:
+                    matched.append("reference")
+                if same_invoice_number:
+                    matched.append("invoice number")
+                if same_description:
+                    matched.append("description")
+                missed = []
+                if days_apart != 0:
+                    missed.append("date")
+                if not same_reference:
+                    missed.append("reference")
+                if not same_invoice_number:
+                    missed.append("invoice number")
+                if not same_description:
+                    missed.append("description")
+                if party_by == "vat":
+                    party_note = "Matched by VAT — same supplier."
+                else:
+                    pct = int(round(name_sim * 100))
+                    party_note = (
+                        f"Names {pct}% similar — likely the same supplier; verify."
+                        if name_sim >= 0.70
+                        else f"Names only {pct}% similar — may be separate parties, please check."
+                    )
+                breakdown = f"Matched: {', '.join(matched)}."
+                if missed:
+                    breakdown += f" Not matched: {', '.join(missed)}."
+                for subject, partner in ((a, b), (b, a)):
+                    this_c = (subject.vendor_name or "").strip() or "this contact"
+                    other_c = (partner.vendor_name or "").strip() or "another contact"
+                    message = (
+                        f"Possible duplicate across contacts — '{this_c}' vs "
+                        f"'{other_c}' ({symbol}{amount:.2f}). {breakdown} {party_note}"
+                    )
+                    flagged.append(FlaggedIssue(
+                        transaction_id=subject.transaction_id,
+                        issue_type=issue_type,
+                        severity="medium",
+                        message=message[:280],
+                        confidence=confidence,
+                        duplicate_of_transaction_id=partner.transaction_id,
+                        duplicate_of_invoice_number=(partner.invoice_number or "").strip() or None,
+                        duplicate_of_date=partner.date,
+                        this_is_likely_original=None,
                         match_reasons=match_reasons,
                     ))
 

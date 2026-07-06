@@ -53,7 +53,10 @@ from app.modules.healthcheck.checks.bank import (
     _find_invoice_direct_deposits,
     _find_opening_balance_differences,
 )
-from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
+from app.modules.healthcheck.checks.duplicates import (
+    _find_duplicate_bills,
+    _find_cross_contact_duplicates,
+)
 from app.modules.healthcheck.engine.deterministic import (
     _inspect_transaction,
 )
@@ -201,6 +204,10 @@ async def run_batch_health_check(
     # Duplicate invoices/bills key on the real ContactID, so two distinct
     # ContactIDs are always treated as separate parties.
     flagged.extend(_find_duplicate_bills(transactions, None, settings))
+    # Same document recorded under two different contact records (e.g. a supplier
+    # saved twice) — matched on content + party (VAT/name), review tier.
+    flagged.extend(_find_cross_contact_duplicates(
+        transactions, context.contact_vat if context else None, settings))
     flagged.extend(_find_opening_balance_differences(transactions, coa_lookup))
     flagged.extend(_find_direction_mismatches(transactions, coa_type_lookup))
     # Multi-Account Suppliers: checks bill line items and Money-Out bank
