@@ -22,7 +22,7 @@ from app.modules.healthcheck.checks.coding import (
     _find_multi_account_suppliers,
     find_amount_outlier_candidates,
 )
-from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
+from app.modules.healthcheck.checks.duplicates import _find_duplicate_documents
 from app.modules.healthcheck.checks.tax import _find_purchase_tax_missing
 from app.modules.healthcheck.engine.deterministic import (
     _check_old_unpaid,
@@ -82,8 +82,8 @@ def test_duplicate_window_override_widens_detection():
     # them inside. Not recurring (10 < 14 lone-pair gap) and same reference (the
     # bill's number) → 1.0 HIGH.
     txns = [_bill("1", 30, ref="DUP"), _bill("2", 20, ref="DUP")]
-    assert _find_duplicate_bills(txns) == []                   # default 0 → dropped
-    wide = _find_duplicate_bills(
+    assert _find_duplicate_documents(txns) == []                   # default 0 → dropped
+    wide = _find_duplicate_documents(
         txns, None, AuditSettings.from_config({"duplicate_days_window": 14}),
     )
     assert wide and wide[0].confidence == 1.0

@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from app.shared.transaction import BatchTransaction
 from app.modules.healthcheck.engine.audit_settings import AuditSettings
-from app.modules.healthcheck.checks.duplicates import _find_duplicate_bills
+from app.modules.healthcheck.checks.duplicates import _find_duplicate_documents
 from app.modules.healthcheck.engine.deterministic import (
     _build_contact_alias,
 )
@@ -40,7 +40,7 @@ def test_rule1_exact_reference():
     # Bill: same reference + amount + same day. The supplier REFERENCE is the
     # bill's number → same reference = same bill → 1.0 HIGH (symmetric with a
     # sales invoice's same-invoice-number = 1.0).
-    hits = _find_duplicate_bills([_doc("B1", "C1", "INV-9"), _doc("B2", "C1", "INV-9")])
+    hits = _find_duplicate_documents([_doc("B1", "C1", "INV-9"), _doc("B2", "C1", "INV-9")])
     assert len(hits) == 2                       # both sides flagged
     assert hits[0].issue_type == "duplicate_bill"
     assert hits[0].confidence == 1.0
@@ -55,11 +55,11 @@ def test_different_refs_hidden_by_default_shown_when_loose():
     # number, so bills don't gate on it).
     pair = [_doc("B1", "C1", "INV-1234", typ="ACCREC"), _doc("B2", "C1", "inv1234", typ="ACCREC")]
     # Default (require_exact_reference ON) → conflicting refs dropped.
-    assert _find_duplicate_bills(pair) == []
+    assert _find_duplicate_documents(pair) == []
     # Toggle OFF → surfaces: no invoice number, conflicting ref, same amount +
     # same day → weak → 0.75 medium (review).
     loose = _loose(duplicate_require_exact_reference=False)
-    hits = _find_duplicate_bills(pair, None, loose)
+    hits = _find_duplicate_documents(pair, None, loose)
     assert len(hits) == 2
     assert hits[0].confidence == 0.75
     assert hits[0].match_reasons["reference_match"] == "different"
@@ -71,7 +71,7 @@ def test_different_refs_hidden_by_default_shown_when_loose():
 def test_rule3_missing_reference():
     # One ref blank → reference scores 0; amount +35, contact +20, date +15 =
     # 0.70 → medium severity (high needs >= 0.80).
-    hits = _find_duplicate_bills([_doc("B1", "C1", "INV-5"), _doc("B2", "C1", None)], None, _LOOSE)
+    hits = _find_duplicate_documents([_doc("B1", "C1", "INV-5"), _doc("B2", "C1", None)], None, _LOOSE)
     assert len(hits) == 2
     assert hits[0].severity == "medium"
 
@@ -82,12 +82,12 @@ def test_different_contacts_not_paired():
     # Two DIFFERENT customers that share a standard reference + amount are NOT a
     # duplicate (e.g. many clients on the same "Monthly Support" fee). Without a
     # duplicate-contacts merge, cross-contact pairs are never generated.
-    hits = _find_duplicate_bills([_doc("B1", "C1", "INV-9"), _doc("B2", "C2", "INV-9")])
+    hits = _find_duplicate_documents([_doc("B1", "C1", "INV-9"), _doc("B2", "C2", "INV-9")])
     assert hits == []
 
 
 def test_genuinely_different_not_flagged():
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "A", amount="100", d=date(2026, 1, 1)),
         _doc("B2", "C1", "B", amount="200", d=date(2026, 2, 2)),
     ])
@@ -96,7 +96,7 @@ def test_genuinely_different_not_flagged():
 
 def test_same_reference_different_amount_not_flagged():
     # Reused generic reference ("Training") on two genuinely different invoices.
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "Training", amount="1082.50"),
         _doc("B2", "C1", "Training", amount="541.25"),
     ])
@@ -106,7 +106,7 @@ def test_same_reference_different_amount_not_flagged():
 def test_far_apart_pair_dropped_by_hard_window():
     # "Date within" is a HARD filter: a same ref+amount pair ~30 days apart is
     # beyond the default 7-day window → dropped entirely (not shown at all).
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "Monthly Support", amount="541.25", d=date(2026, 3, 22)),
         _doc("B2", "C1", "Monthly Support", amount="541.25", d=date(2026, 4, 21)),
     ])
@@ -117,7 +117,7 @@ def test_adjacent_day_duplicate_flagged():
     # Hamilton Smith case: same customer, same amount + reference, 1 day apart.
     # Default window is 0 (same day) → must widen to 1 to pair adjacent days.
     w1 = AuditSettings.from_config({"duplicate_days_window": 1})
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "Monthly Support", amount="541.25", d=date(2026, 3, 21)),
         _doc("B2", "C1", "Monthly Support", amount="541.25", d=date(2026, 3, 22)),
     ], None, w1)
@@ -129,7 +129,7 @@ def test_far_apart_identical_pair_is_recurring_review():
     # Window 40 → the 30-day pair is inside the window, but two IDENTICAL
     # invoices ~a month apart (even with no 3+ series) read as a recurring
     # charge, not a same-period duplicate → LOW review (0.45), never 0.97.
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "Monthly Support", amount="541.25", d=date(2026, 3, 22)),
         _doc("B2", "C1", "Monthly Support", amount="541.25", d=date(2026, 4, 21)),
     ], None, _WIDE)
@@ -150,7 +150,7 @@ def test_same_invoice_number_is_high_not_recurring():
             reference="Monthly", invoice_number=num,
         )
     wide = AuditSettings.from_config({"duplicate_days_window": 40})
-    hits = _find_duplicate_bills(
+    hits = _find_duplicate_documents(
         [_inv("a", "INV-9", date(2026, 3, 21)), _inv("b", "INV-9", date(2026, 4, 21))],
         None, wide,
     )
@@ -174,7 +174,7 @@ def test_posted_date_decides_original_vs_duplicate():
     a = _inv("A", date(2026, 3, 21), date(2026, 4, 6))   # dated first, entered LATE
     b = _inv("B", date(2026, 3, 22), date(2026, 3, 22))  # dated 2nd, entered on time
     w1 = AuditSettings.from_config({"duplicate_days_window": 1})  # issue dates 1 day apart
-    hits = _find_duplicate_bills([a, b], None, w1)
+    hits = _find_duplicate_documents([a, b], None, w1)
     orig = [h for h in hits if h.this_is_likely_original]
     dup = [h for h in hits if not h.this_is_likely_original]
     assert orig and orig[0].transaction_id == "B"   # entered first → original
@@ -184,7 +184,7 @@ def test_posted_date_decides_original_vs_duplicate():
 def test_close_identical_pair_still_high():
     # A 2-day-apart identical pair is a genuine same-period duplicate → HIGH.
     wide = AuditSettings.from_config({"duplicate_days_window": 40})
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "Monthly Support", amount="541.25", d=date(2026, 3, 21)),
         _doc("B2", "C1", "Monthly Support", amount="541.25", d=date(2026, 3, 23)),
     ], None, wide)
@@ -195,7 +195,7 @@ def test_close_identical_pair_still_high():
 
 def test_just_outside_window_dropped():
     # 8 days apart > 7-day window → dropped by the hard filter.
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "INV-9", amount="100", d=date(2026, 1, 1)),
         _doc("B2", "C1", "INV-9", amount="100", d=date(2026, 1, 9)),
     ])
@@ -220,7 +220,7 @@ def test_recurring_monthly_series_is_review_not_high():
         _doc("B", "C1", "Monthly Support", amount="541.25", d=date(2026, 4, 21)),
         _doc("C", "C1", "Monthly Support", amount="541.25", d=date(2026, 5, 21)),
     ]
-    hits = _find_duplicate_bills(txns, None, _WIDE)
+    hits = _find_duplicate_documents(txns, None, _WIDE)
     assert hits, "recurring pairs should SHOW (as review), not be hidden"
     for h in hits:
         assert h.match_reasons["tier"] == "low"
@@ -237,7 +237,7 @@ def test_double_entry_in_recurring_series_flagged_high():
         _doc("DUP", "C1", "Monthly Support", amount="541.25", d=date(2026, 4, 23)),  # double entry
         _doc("C", "C1", "Monthly Support", amount="541.25", d=date(2026, 5, 21)),
     ]
-    hits = _find_duplicate_bills(txns, None, _WIDE)
+    hits = _find_duplicate_documents(txns, None, _WIDE)
     # The April 21 ↔ April 23 pair is the real duplicate → HIGH.
     dup = [h for h in hits if h.match_reasons["tier"] == "high"]
     assert dup, "the same-period double-entry must be flagged HIGH"
@@ -261,7 +261,7 @@ def test_recurring_suppresses_distinct_documents_note():
     txns = [_r("a", "INV-1", date(2026, 1, 10)),
             _r("b", "INV-2", date(2026, 2, 10)),
             _r("c", "INV-3", date(2026, 3, 10))]
-    rec = [h for h in _find_duplicate_bills(txns, None, _WIDE)
+    rec = [h for h in _find_duplicate_documents(txns, None, _WIDE)
            if h.match_reasons.get("recurring")]
     assert rec, "monthly series should be recurring"
     for h in rec:
@@ -273,7 +273,7 @@ def test_recurring_suppresses_distinct_documents_note():
 def test_high_tier_keeps_original_duplicate_tags():
     # A confirmed duplicate (exact ref, same day, same amount → 90% HIGH) IS
     # directional: exactly one ORIGINAL + one DUPLICATE, and we recommend a void.
-    hits = _find_duplicate_bills([_doc("A", "C1", "INV-9"), _doc("B", "C1", "INV-9")],
+    hits = _find_duplicate_documents([_doc("A", "C1", "INV-9"), _doc("B", "C1", "INV-9")],
                                  None, _LOOSE)
     assert len(hits) == 2
     assert all(h.match_reasons["tier"] == "high" for h in hits)
@@ -290,7 +290,7 @@ def test_review_tier_drops_original_duplicate_tag():
         _doc("b", "C1", "Monthly", amount="99", d=date(2026, 2, 10)),
         _doc("c", "C1", "Monthly", amount="99", d=date(2026, 3, 10)),
     ]
-    rec = [h for h in _find_duplicate_bills(txns, None, _WIDE)
+    rec = [h for h in _find_duplicate_documents(txns, None, _WIDE)
            if h.match_reasons.get("recurring")]
     assert rec
     for h in rec:
@@ -302,7 +302,7 @@ def test_review_tier_drops_original_duplicate_tag():
 def test_medium_tier_drops_original_duplicate_tag():
     # No ref + no number, same amount + same day → 75% MEDIUM review → also
     # non-directional (just a possible match with its confidence).
-    hits = _find_duplicate_bills([_doc("A", "C1", None), _doc("B", "C1", None)],
+    hits = _find_duplicate_documents([_doc("A", "C1", None), _doc("B", "C1", None)],
                                  None, _LOOSE)
     assert len(hits) == 2
     assert all(h.match_reasons["tier"] == "medium" for h in hits)
@@ -312,7 +312,7 @@ def test_medium_tier_drops_original_duplicate_tag():
 
 
 def test_true_duplicate_same_ref_amount_date_flagged():
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "INV-9", amount="541.25", d=date(2026, 3, 22)),
         _doc("B2", "C1", "INV-9", amount="541.25", d=date(2026, 3, 22)),
     ])
@@ -329,7 +329,7 @@ def test_bill_diff_reference_same_day_is_distinct_docs_candidate():
         _doc("B1", "C1", "INV-100", amount="500", d=date(2026, 1, 1)),
         _doc("B2", "C1", "INV-200", amount="500", d=date(2026, 1, 1)),
     ]
-    hits = _find_duplicate_bills(pair)          # default settings → still shown
+    hits = _find_duplicate_documents(pair)          # default settings → still shown
     assert len(hits) == 2
     assert hits[0].confidence == 0.95
     assert hits[0].match_reasons["tier"] == "high"
@@ -338,7 +338,7 @@ def test_bill_diff_reference_same_day_is_distinct_docs_candidate():
 
 def test_different_direction_not_paired():
     # One ACCREC, one ACCPAY — never a duplicate pair.
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "INV-9", typ="ACCREC"),
         _doc("B2", "C1", "INV-9", typ="ACCPAY"),
     ])
@@ -349,7 +349,7 @@ def test_different_direction_not_paired():
 
 def test_duplicate_sales_credit_notes_flagged():
     # Two identical sales credit notes for the same customer → duplicate.
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("CN1", "C1", "CR-9", typ="ACCRECCREDIT"),
         _doc("CN2", "C1", "CR-9", typ="ACCRECCREDIT"),
     ])
@@ -359,7 +359,7 @@ def test_duplicate_sales_credit_notes_flagged():
 
 
 def test_duplicate_purchase_credit_notes_flagged():
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("CN1", "C1", "CR-9", typ="ACCPAYCREDIT"),
         _doc("CN2", "C1", "CR-9", typ="ACCPAYCREDIT"),
     ])
@@ -370,7 +370,7 @@ def test_duplicate_purchase_credit_notes_flagged():
 def test_invoice_and_credit_note_never_paired():
     # The critical false-positive guard: an invoice (ACCREC) and a credit note
     # (ACCRECCREDIT) for the same contact/ref/amount are NEVER a duplicate pair.
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("INV", "C1", "DOC-9", typ="ACCREC"),
         _doc("CN", "C1", "DOC-9", typ="ACCRECCREDIT"),
     ])
@@ -388,7 +388,7 @@ def test_applied_credit_notes_still_flagged_despite_paid_gate():
             contact_id="C1", reference="CR-9", status="PAID",
             amount_paid=Decimal("100"), amount_due=Decimal("0"),
         )
-    hits = _find_duplicate_bills([_credit("CN1"), _credit("CN2")])
+    hits = _find_duplicate_documents([_credit("CN1"), _credit("CN2")])
     assert len(hits) == 2
     assert hits[0].issue_type == "duplicate_credit_note"
 
@@ -397,7 +397,7 @@ def test_applied_credit_notes_still_flagged_despite_paid_gate():
 
 def test_legacy_fallback_to_vendor_name():
     # No contact_id → falls back to vendor name grouping.
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", None, "INV-9", vendor="Acme"),
         _doc("B2", None, "INV-9", vendor="Acme"),
     ])
@@ -405,7 +405,7 @@ def test_legacy_fallback_to_vendor_name():
 
 
 def test_accrec_is_duplicate_invoice():
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "INV-9", typ="ACCREC"),
         _doc("B2", "C1", "INV-9", typ="ACCREC"),
     ])
@@ -425,7 +425,7 @@ def test_contact_alias_union_find():
 def test_cross_contact_not_paired_without_alias():
     # Two different ContactIDs are NEVER paired — duplicate invoices key on the
     # real ContactID only, so distinct contacts stay separate.
-    hits = _find_duplicate_bills([_doc("1", "A", "INV-9"), _doc("2", "B", "INV-9")], None)
+    hits = _find_duplicate_documents([_doc("1", "A", "INV-9"), _doc("2", "B", "INV-9")], None)
     assert hits == []
 
 
@@ -446,14 +446,14 @@ def test_require_same_amount_off_flags_different_values():
         _doc("B1", "C1", "INV-1", amount="100", d=date(2026, 1, 1)),
         _doc("B2", "C1", "INV-9", amount="500", d=date(2026, 1, 1)),  # diff amount+ref
     ]
-    assert _find_duplicate_bills(pair) == []                       # default: amount required
+    assert _find_duplicate_documents(pair) == []                       # default: amount required
     # loose mode: allow differing values AND lower the waterfall floor so the
     # weaker (diff-value, diff-ref) match surfaces.
     loose = AuditSettings.from_config({
         "duplicate_require_same_amount": False, "duplicate_min_confidence": 0.3,
         "duplicate_require_exact_reference": False,   # allow the conflicting refs through
     })
-    hits = _find_duplicate_bills(pair, None, loose)
+    hits = _find_duplicate_documents(pair, None, loose)
     assert len(hits) == 2                                          # loose mode flags it
     assert hits[0].match_reasons["same_amount"] is False
     assert hits[0].match_reasons["reference_match"] == "different"
@@ -463,11 +463,11 @@ def test_require_exact_reference_suppresses_normalized():
     s = AuditSettings.from_config({"duplicate_require_exact_reference": True})
     # SALES: conflicting refs (case differs, no invoice number) → suppressed by
     # the sales reference gate when exact required.
-    assert _find_duplicate_bills(
+    assert _find_duplicate_documents(
         [_doc("B1", "C1", "INV-1234", typ="ACCREC"), _doc("B2", "C1", "inv1234", typ="ACCREC")], None, s,
     ) == []
     # exact-reference sales pair (no invoice number) still flagged at 0.90.
-    assert len(_find_duplicate_bills(
+    assert len(_find_duplicate_documents(
         [_doc("B1", "C1", "INV-9", typ="ACCREC"), _doc("B2", "C1", "INV-9", typ="ACCREC")], None, s,
     )) == 2
 
@@ -475,15 +475,15 @@ def test_require_exact_reference_suppresses_normalized():
 def test_also_check_paid_off_requires_one_unpaid():
     off = AuditSettings.from_config({"duplicate_also_check_paid": False})
     # both paid → suppressed
-    assert _find_duplicate_bills(
+    assert _find_duplicate_documents(
         [_paid_doc("B1", "INV-9", paid=True), _paid_doc("B2", "INV-9", paid=True)], None, off,
     ) == []
     # one unpaid → flagged
-    assert len(_find_duplicate_bills(
+    assert len(_find_duplicate_documents(
         [_paid_doc("B1", "INV-9", paid=True), _paid_doc("B2", "INV-9", paid=False)], None, off,
     )) == 2
     # default (also_check_paid=False now) → both-paid suppressed too
-    assert _find_duplicate_bills(
+    assert _find_duplicate_documents(
         [_paid_doc("B1", "INV-9", paid=True), _paid_doc("B2", "INV-9", paid=True)],
     ) == []
 
@@ -494,22 +494,22 @@ def test_output_ranks_by_confidence():
         _doc("A1", "C1", "INV-9", amount="100"), _doc("A2", "C1", "INV-9", amount="100"),
         _doc("B1", "C2", None, amount="200"), _doc("B2", "C2", None, amount="200"),
     ]
-    confs = [h.confidence for h in _find_duplicate_bills(txns, None, _LOOSE)]
+    confs = [h.confidence for h in _find_duplicate_documents(txns, None, _LOOSE)]
     assert confs == sorted(confs, reverse=True)
     assert confs[0] == 1.0 and 0.75 in confs
 
 
 def test_min_confidence_floor_drops_weak_matches():
     pair = [_doc("A1", "C1", None, amount="100"), _doc("A2", "C1", None, amount="100")]  # no ref → 0.75
-    assert _find_duplicate_bills(pair, None, _LOOSE) != []         # low floor → kept
-    assert _find_duplicate_bills(pair) == []                       # default bar 0.90 → 0.75 dropped
+    assert _find_duplicate_documents(pair, None, _LOOSE) != []         # low floor → kept
+    assert _find_duplicate_documents(pair) == []                       # default bar 0.90 → 0.75 dropped
 
 
 # --- match_reasons ("what matched" chips) ----------------------------------
 
 def test_match_reasons_exact_reference():
     w1 = AuditSettings.from_config({"duplicate_days_window": 1})
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", "INV-9", amount="541.25", d=date(2026, 3, 21)),
         _doc("B2", "C1", "INV-9", amount="541.25", d=date(2026, 3, 22)),
     ], None, w1)
@@ -523,7 +523,7 @@ def test_match_reasons_exact_reference():
 
 
 def test_match_reasons_no_reference_medium():
-    hits = _find_duplicate_bills([
+    hits = _find_duplicate_documents([
         _doc("B1", "C1", None, amount="100", d=date(2026, 1, 1)),
         _doc("B2", "C1", None, amount="100", d=date(2026, 1, 1)),
     ], None, _LOOSE)
@@ -538,7 +538,7 @@ def test_alias_never_merges_distinct_contacts():
     # the duplicate-invoice engine IGNORES it and keys on the real ContactID, so
     # the two records stay separate and no duplicate is raised.
     alias = _build_contact_alias([["A", "B"]])
-    hits = _find_duplicate_bills([_doc("1", "A", "INV-9"), _doc("2", "B", "INV-9")], alias)
+    hits = _find_duplicate_documents([_doc("1", "A", "INV-9"), _doc("2", "B", "INV-9")], alias)
     assert hits == []
 
 
@@ -546,13 +546,13 @@ def test_alias_never_merges_transitive_contacts():
     # Transitive alias (A↔B↔C) is likewise ignored: A and C are different
     # ContactIDs, so they are never paired.
     alias = _build_contact_alias([["A", "B"], ["B", "C"]])
-    hits = _find_duplicate_bills([_doc("1", "A", "INV-9"), _doc("2", "C", "INV-9")], alias)
+    hits = _find_duplicate_documents([_doc("1", "A", "INV-9"), _doc("2", "C", "INV-9")], alias)
     assert hits == []
 
 
 def test_cross_contact_flag_always_false():
     # Same ContactID pair → flagged, and cross_contact is always False now.
-    hits = _find_duplicate_bills([_doc("1", "C1", "INV-9"), _doc("2", "C1", "INV-9")])
+    hits = _find_duplicate_documents([_doc("1", "C1", "INV-9"), _doc("2", "C1", "INV-9")])
     assert hits and hits[0].match_reasons["cross_contact"] is False
 
 
@@ -567,7 +567,7 @@ def test_scale_sliding_window_only_compares_within_window():
     txns = [_doc(f"M{i}", "C1", "Sub", amount="100", d=base + timedelta(days=30 * i))
             for i in range(50)]
     txns.append(_doc("DUP", "C1", "Sub", amount="100", d=base + timedelta(days=30 * 10)))  # same day as M10
-    hits = _find_duplicate_bills(txns)
+    hits = _find_duplicate_documents(txns)
     pairs = {frozenset([h.transaction_id, h.duplicate_of_transaction_id]) for h in hits}
     # Only the same-day re-entry pairs; every 30-day-apart monthly pair is
     # outside the window → never compared. (Proves sliding-window equivalence.)
@@ -585,14 +585,14 @@ def test_distinct_documents_hint_on_different_numbers():
         )
     w = AuditSettings.from_config({"duplicate_days_window": 7, "duplicate_min_confidence": 0.0})
     # DIFFERENT invoice numbers + a DATE GAP → could be 2 distinct documents → hint.
-    hits = _find_duplicate_bills([_inv("A", "DEP-1"), _inv("B", "BAL-1", date(2026, 1, 3))], None, w)
+    hits = _find_duplicate_documents([_inv("A", "DEP-1"), _inv("B", "BAL-1", date(2026, 1, 3))], None, w)
     assert len(hits) == 2
     assert hits[0].match_reasons["distinct_documents_possible"] is True
     assert "distinct documents" in hits[0].message
     # SAME DAY, different numbers → confident re-entry (Xero auto-renumber) → NO hint.
-    same_day = _find_duplicate_bills([_inv("A", "DEP-1"), _inv("B", "BAL-1")], None, w)
+    same_day = _find_duplicate_documents([_inv("A", "DEP-1"), _inv("B", "BAL-1")], None, w)
     assert same_day and same_day[0].match_reasons["distinct_documents_possible"] is False
     assert "distinct documents" not in same_day[0].message
     # SAME invoice number → no hint regardless of date.
-    hits2 = _find_duplicate_bills([_inv("A", "INV-9"), _inv("B", "INV-9", date(2026, 1, 3))], None, w)
+    hits2 = _find_duplicate_documents([_inv("A", "INV-9"), _inv("B", "INV-9", date(2026, 1, 3))], None, w)
     assert hits2 and hits2[0].match_reasons["distinct_documents_possible"] is False

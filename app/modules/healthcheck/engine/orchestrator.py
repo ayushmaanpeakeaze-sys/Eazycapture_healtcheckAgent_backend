@@ -54,7 +54,7 @@ from app.modules.healthcheck.checks.bank import (
     _find_opening_balance_differences,
 )
 from app.modules.healthcheck.checks.duplicates import (
-    _find_duplicate_bills,
+    _find_duplicate_documents,
     _find_cross_contact_duplicates,
 )
 from app.modules.healthcheck.engine.deterministic import (
@@ -203,7 +203,7 @@ async def run_batch_health_check(
         flagged.extend(amount_outlier_flag(c) for c in outlier_candidates)
     # Duplicate invoices/bills key on the real ContactID, so two distinct
     # ContactIDs are always treated as separate parties.
-    flagged.extend(_find_duplicate_bills(transactions, None, settings))
+    flagged.extend(_find_duplicate_documents(transactions, None, settings))
     # Same document recorded under two different contact records (e.g. a supplier
     # saved twice) — matched on content + party (VAT/name), review tier.
     flagged.extend(_find_cross_contact_duplicates(

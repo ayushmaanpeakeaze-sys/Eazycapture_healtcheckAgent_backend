@@ -1,6 +1,6 @@
 """Cross-contact duplicate detection — same document under two contact records.
 
-The per-contact pass (``_find_duplicate_bills``) keys strictly on ContactID, so a
+The per-contact pass (``_find_duplicate_documents``) keys strictly on ContactID, so a
 supplier saved twice (e.g. "Peakvisory" and "Peakvisory Limited") hides a real
 duplicate. ``_find_cross_contact_duplicates`` blocks by amount, then scores each
 cross-contact pair on several signals — party (VAT when both present, else name

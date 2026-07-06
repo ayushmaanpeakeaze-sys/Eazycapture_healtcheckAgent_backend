@@ -1,6 +1,6 @@
 """Duplicates check group.
 
-``_find_duplicate_bills`` detects duplicate invoices / bills / credit notes
+``_find_duplicate_documents`` detects duplicate invoices / bills / credit notes
 (it covers all three document directions). ``duplicate_contact`` is detected in
 ``contact_checks`` but its name-similarity setting lives in the Duplicates group,
 so it is included in SETTING_FIELDS / META here.
@@ -70,7 +70,7 @@ def _ref_match(a: BatchTransaction, b: BatchTransaction) -> str:
     return "exact" if ra == rb else "different"
 
 
-def _find_duplicate_bills(
+def _find_duplicate_documents(
     transactions: list[BatchTransaction],
     contact_alias: Optional[dict[str, str]] = None,
     settings: AuditSettings = DEFAULT_SETTINGS,
@@ -305,7 +305,7 @@ def _find_cross_contact_duplicates(
 ) -> list[FlaggedIssue]:
     """Content-based duplicate detection ACROSS different contacts.
 
-    Complements ``_find_duplicate_bills`` (per-ContactID, left untouched). The same
+    Complements ``_find_duplicate_documents`` (per-ContactID, left untouched). The same
     document recorded under two contact records — a supplier saved twice as
     "Peakvisory" and "Peakvisory Limited" — never shares a ContactID, so the
     per-contact pass can't see it.
@@ -345,7 +345,7 @@ def _find_cross_contact_duplicates(
                 days_apart = (b.date - a.date).days
                 if days_apart > settings.duplicate_days_window:
                     break  # sorted → every later b is further still
-                # Same-contact pairs belong to _find_duplicate_bills.
+                # Same-contact pairs belong to _find_duplicate_documents.
                 if _contact_key(a) == _contact_key(b):
                     continue
                 if (not settings.duplicate_also_check_paid
