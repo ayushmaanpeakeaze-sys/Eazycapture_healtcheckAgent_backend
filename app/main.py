@@ -24,6 +24,7 @@ from app.modules.healthcheck.batch_router import router as batch_router
 from app.modules.healthcheck.demo_router import router as demo_router
 from app.modules.healthcheck.validation_router import router as validation_router
 from app.core.config import settings
+from app.core.observability import init_sentry
 from app.core.db import dispose_engine
 from app.modules.ai.client import close_groq
 from app.core.redis_client import close_redis
@@ -50,6 +51,8 @@ async def lifespan(_: FastAPI):
         except Exception:
             logger.exception("%s close failed on shutdown", label)
 
+
+init_sentry()
 
 app = FastAPI(
     title="EazyCapture AI Agent",

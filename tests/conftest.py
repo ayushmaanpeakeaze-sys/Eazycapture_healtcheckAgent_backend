@@ -20,6 +20,9 @@ os.environ.setdefault("HEALTHCHECK_AI_ENABLED", "false")
 # config._load() reads it (load_dotenv won't override an existing env var).
 os.environ["AUTH_DISABLED"] = "true"
 
+# Never report test runs to Sentry — force the DSN empty so init_sentry() no-ops.
+os.environ["SENTRY_DSN"] = ""
+
 
 @pytest.fixture(scope="session")
 def client() -> TestClient:

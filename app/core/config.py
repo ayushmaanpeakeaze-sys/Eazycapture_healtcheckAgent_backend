@@ -51,6 +51,10 @@ class Settings:
     # the app refuses to boot with insecure settings (see assert_safe_for_environment).
     APP_ENV: str
 
+    # Sentry error + performance monitoring. Empty DSN → disabled (no-op).
+    SENTRY_DSN: str
+    SENTRY_TRACES_SAMPLE_RATE: float
+
     # Auth — empty JWT_SECRET = demo mode. Set AUTH_DISABLED=true to force the
     # open demo path even when a JWT secret is present.
     AUTH_DISABLED: bool
@@ -193,6 +197,8 @@ def _load() -> Settings:
         # org has no synced data yet.
         AUDIT_SOURCE=os.environ.get("AUDIT_SOURCE", "db").strip().lower(),
         APP_ENV=os.environ.get("APP_ENV", "development").strip().lower(),
+        SENTRY_DSN=os.environ.get("SENTRY_DSN", "").strip(),
+        SENTRY_TRACES_SAMPLE_RATE=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "1.0")),
         AUTH_DISABLED=_as_bool(os.environ.get("AUTH_DISABLED", "false")),
         JWT_SECRET=os.environ.get("JWT_SECRET", ""),
         JWT_ALGORITHM=os.environ.get("JWT_ALGORITHM", "HS256"),
