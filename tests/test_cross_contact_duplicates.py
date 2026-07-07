@@ -136,6 +136,29 @@ def test_one_vat_missing_falls_back_to_name():
     assert hits[0].match_reasons["party_by"] == "name"
 
 
+# --- original vs duplicate (paid copy = keep) --------------------------------
+
+def test_paid_copy_is_the_likely_original():
+    # One paid, one unpaid copy across two contacts → the PAID one is already
+    # actioned (keep it); the UNPAID one is the risky duplicate. High risk.
+    def inv(tid, cid, vendor, status, due):
+        return BatchTransaction(
+            transaction_id=tid, date=date(2026, 7, 7), description="Chairs and tables",
+            amount=Decimal("300"), vendor_name=vendor, type="ACCREC", contact_id=cid,
+            reference="nvn", invoice_number=None, status=status, amount_due=Decimal(due),
+        )
+    hits = _find_cross_contact_duplicates([
+        inv("unpaid-one", "C1", "Ayushmaan singh rajput", "AUTHORISED", "300"),
+        inv("paid-one", "C2", "Ayushmaan Singh", "PAID", "0"),
+    ])
+    assert len(hits) == 2
+    original = [h for h in hits if h.this_is_likely_original]
+    assert len(original) == 1
+    assert original[0].transaction_id == "paid-one"      # PAID copy = keep
+    assert hits[0].match_reasons["risk"] == "high"
+    assert hits[0].match_reasons["reference_match"] == "exact"
+
+
 # --- boundaries --------------------------------------------------------------
 
 def test_same_contact_ignored():

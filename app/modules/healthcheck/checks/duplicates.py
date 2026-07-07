@@ -408,6 +408,7 @@ def _find_cross_contact_duplicates(
                     "party_by": party_by,
                     "name_similarity": round(name_sim, 2),
                     "same_reference": same_reference,
+                    "reference_match": _ref_match(a, b),
                     "same_invoice_number": same_invoice_number,
                     "same_description": same_description,
                     "confidence": confidence,
@@ -449,7 +450,20 @@ def _find_cross_contact_duplicates(
                 breakdown = f"Matched: {', '.join(matched)}."
                 if missed:
                     breakdown += f" Not matched: {', '.join(missed)}."
-                for subject, partner in ((a, b), (b, a)):
+                # Which is the likely original: a PAID copy is already actioned, so
+                # the UNPAID one is the risky duplicate; else the earlier-dated one.
+                # Mirrors the per-contact pass so the UI orders/labels them the same.
+                a_paid, b_paid = _is_paid(a), _is_paid(b)
+                if a_paid != b_paid:
+                    original, duplicate = (a, b) if a_paid else (b, a)
+                elif a.posted_date and b.posted_date and a.posted_date != b.posted_date:
+                    original, duplicate = (a, b) if a.posted_date <= b.posted_date else (b, a)
+                else:
+                    original, duplicate = (a, b) if a.date <= b.date else (b, a)
+                for subject, partner, is_orig in (
+                    (original, duplicate, True),
+                    (duplicate, original, False),
+                ):
                     this_c = (subject.vendor_name or "").strip() or "this contact"
                     other_c = (partner.vendor_name or "").strip() or "another contact"
                     message = (
@@ -465,7 +479,7 @@ def _find_cross_contact_duplicates(
                         duplicate_of_transaction_id=partner.transaction_id,
                         duplicate_of_invoice_number=(partner.invoice_number or "").strip() or None,
                         duplicate_of_date=partner.date,
-                        this_is_likely_original=None,
+                        this_is_likely_original=is_orig,
                         match_reasons=match_reasons,
                     ))
 
