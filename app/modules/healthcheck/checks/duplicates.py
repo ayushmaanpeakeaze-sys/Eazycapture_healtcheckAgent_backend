@@ -459,27 +459,21 @@ def _find_cross_contact_duplicates(
                     "risk": "high" if one_paid_one_out else "normal",
                     "advisory": _CROSS_ADVISORY,
                 }
-                # Spell out what lined up and what didn't, plus how the two contacts
-                # were matched — so a weak match reads as "check this", not a
-                # confirmed duplicate. The granular flags also live in match_reasons.
+                # Spell out what lined up and what didn't — so a weak match reads
+                # as "check this", not a confirmed duplicate. The identifying
+                # number is deliberately NEVER called out: a bill has none of its
+                # own (its supplier reference IS its number, shown as "reference"),
+                # and a sales invoice's is auto-generated so it always differs
+                # across contacts — expected, not a real mismatch. So the breakdown
+                # speaks in amount / date / reference / description only.
                 matched = ["amount"]
-                if days_apart == 0:
-                    matched.append("date")
-                if same_reference:
-                    matched.append("reference")
-                if same_invoice_number:
-                    matched.append("invoice number")
-                if same_description:
-                    matched.append("description")
-                missed = []
-                if days_apart != 0:
-                    missed.append("date")
-                if not same_reference:
-                    missed.append("reference")
-                if not same_invoice_number:
-                    missed.append("invoice number")
-                if not same_description:
-                    missed.append("description")
+                missed: list[str] = []
+                for _label, _ok in (
+                    ("date", days_apart == 0),
+                    ("reference", same_reference),
+                    ("description", same_description),
+                ):
+                    (matched if _ok else missed).append(_label)
                 party_note = (
                     "Matched by VAT."
                     if party_by == "vat"
