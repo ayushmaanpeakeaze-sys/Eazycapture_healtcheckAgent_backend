@@ -286,16 +286,41 @@ def _find_duplicate_documents(
     return flagged
 
 
-_CROSS_NAME_WEIGHT = 35     # max points from name similarity (the party signal)
-_CROSS_AMOUNT_POINTS = 35   # same amount — the blocking anchor, always present
-_CROSS_SAMEDAY_POINTS = 25
-_CROSS_WINDOW_POINTS = 15   # within the date window but not same day
+# Cross-contact confidence is additive and HONEST: the weights sum to 100 at a
+# perfect match, so the score reflects exactly which signals lined up — no cap
+# that would fake a 100%. A sales invoice's identifier (its invoice number) is
+# auto-numbered fresh by Xero, so it ALWAYS differs across contacts; a
+# cross-contact SALES duplicate therefore tops out ~80%. A BILL's identifier is
+# the reused supplier reference, so a bill can reach ~95%. That inherent ceiling
+# is why the flag bar below is review-tier, not the same-contact 90%.
+_CROSS_AMOUNT_POINTS = 20    # same amount — the blocking anchor, always present
+_CROSS_NAME_WEIGHT = 30      # max points from the party signal (VAT or name similarity)
+_CROSS_SAMEDAY_POINTS = 15
+_CROSS_WINDOW_POINTS = 8      # within the date window but not same day
 # The document's identifying number is the invoice number for a sales invoice
 # but the supplier REFERENCE for a bill (bills carry no number of their own).
 # Matching it is the strong "same document" signal; the other field is weak.
-_CROSS_IDENTIFIER_POINTS = 25
-_CROSS_SECONDARY_POINTS = 10
-_CROSS_DESCRIPTION_POINTS = 5
+_CROSS_IDENTIFIER_POINTS = 20
+_CROSS_DESCRIPTION_POINTS = 10
+_CROSS_SECONDARY_POINTS = 5
+# Party gate: with no VAT to compare, the two contacts must be at least this
+# name-similar to be plausibly the SAME supplier under two records. Below it they
+# are treated as different parties and skipped OUTRIGHT — the clean cut that keeps
+# a low-name pair (Hamilton Smith Ltd vs Rex Media Group, 26%) out no matter how
+# much of their content coincides. A touch below the duplicate-contacts bar (70%)
+# because a cross-contact pair must ALSO clear the confidence bar below.
+_CROSS_NAME_MIN = 0.60
+# Review-tier confidence bar. Cross-contact can't use the unique invoice-number
+# match that lifts a same-contact duplicate to 90%+, so it flags lower: enough to
+# surface a name-similar + content-matching pair (e.g. ~74%) while a bare
+# same-amount coincidence stays under.
+_CROSS_MIN_CONFIDENCE = 0.60
+# Shown verbatim on every cross-contact flag (also in match_reasons.advisory) so a
+# match always reads as "check this", never a confirmed duplicate.
+_CROSS_ADVISORY = (
+    "These may be the same supplier entered twice under two contact records — "
+    "verify in Xero before treating either as a duplicate."
+)
 
 
 def _find_cross_contact_duplicates(
@@ -315,14 +340,22 @@ def _find_cross_contact_duplicates(
     per-contact ``duplicate_require_same_amount`` toggle does not apply — without a
     contact anchor there is nothing else to bound the comparison.
 
-    The two contacts being the same party is judged first by VAT
-    (``contact_vat``: ContactID → VAT number) when BOTH have one — same VAT
-    confirms, different VAT means different companies and the pair is skipped
-    outright. When a VAT is missing it falls back to name similarity. That party
-    signal is then just one input to a multi-signal score (same date, same
-    reference, same invoice number, same description) — none decides alone, so two
-    unrelated parties who merely share an amount (both spent £400) fall under the
-    confidence bar. Always review tier with ``cross_contact`` set.
+    Two gates, both at 60% (review tier — a cross-contact match can never use the
+    unique invoice-number match that confirms a same-contact duplicate):
+
+    1. PARTY gate — are the two contacts the same supplier? VAT decides when BOTH
+       have one (same VAT confirms; different VAT means different companies →
+       skip). With no VAT it falls back to name similarity, which must clear
+       ``_CROSS_NAME_MIN`` (0.60) or the pair is treated as different parties and
+       skipped OUTRIGHT — content never overrides this (so Hamilton Smith Ltd vs
+       Rex Media Group at 26% stays out however much lines up).
+    2. CONFIDENCE gate — among same-party pairs, an honest additive score (party
+       strength + same date + reference + invoice number + description; weights
+       sum to 100, no fake cap) must clear ``_CROSS_MIN_CONFIDENCE`` (0.60), so a
+       bare same-amount coincidence stays under.
+
+    Always review tier with ``cross_contact`` set and an ``advisory`` telling the
+    user to verify in Xero.
     """
     vat_map = contact_vat or {}
     by_amount: dict[tuple[str, Any], list[BatchTransaction]] = defaultdict(list)
@@ -366,6 +399,11 @@ def _find_cross_contact_duplicates(
                         _norm_contact_name(b.vendor_name or ""),
                     )
                     party_by = "name"
+                    # Party gate: names too different to be the same supplier under
+                    # two records → skip outright, no matter how much content lines
+                    # up. VAT-confirmed pairs above bypass this by design.
+                    if name_sim < _CROSS_NAME_MIN:
+                        continue
 
                 # --- multi-signal score: no single signal decides ---
                 ra, rb = (a.reference or "").strip(), (b.reference or "").strip()
@@ -382,8 +420,11 @@ def _find_cross_contact_duplicates(
                 else:
                     same_identifier, same_secondary = same_invoice_number, same_reference
 
-                points = _CROSS_AMOUNT_POINTS
-                points += round(name_sim * _CROSS_NAME_WEIGHT)
+                # Name is scored at full float precision (not per-signal rounded),
+                # so 91% vs 92% name shows in the final number; only the total is
+                # rounded, for display. The weights sum to 100, so no fake cap.
+                points = float(_CROSS_AMOUNT_POINTS)
+                points += name_sim * _CROSS_NAME_WEIGHT
                 points += _CROSS_SAMEDAY_POINTS if days_apart == 0 else _CROSS_WINDOW_POINTS
                 if same_identifier:
                     points += _CROSS_IDENTIFIER_POINTS
@@ -391,8 +432,8 @@ def _find_cross_contact_duplicates(
                     points += _CROSS_SECONDARY_POINTS
                 if same_description:
                     points += _CROSS_DESCRIPTION_POINTS
-                confidence = min(points, 100) / 100.0
-                if confidence < settings.duplicate_min_confidence:
+                confidence = round(min(points, 100.0) / 100.0, 2)
+                if confidence < _CROSS_MIN_CONFIDENCE:
                     continue
 
                 one_paid_one_out = _is_paid(a) != _is_paid(b)
@@ -416,6 +457,7 @@ def _find_cross_contact_duplicates(
                     "tier": "review",
                     "one_paid_one_outstanding": one_paid_one_out,
                     "risk": "high" if one_paid_one_out else "normal",
+                    "advisory": _CROSS_ADVISORY,
                 }
                 # Spell out what lined up and what didn't, plus how the two contacts
                 # were matched — so a weak match reads as "check this", not a
@@ -438,18 +480,15 @@ def _find_cross_contact_duplicates(
                     missed.append("invoice number")
                 if not same_description:
                     missed.append("description")
-                if party_by == "vat":
-                    party_note = "Matched by VAT — same supplier."
-                else:
-                    pct = int(round(name_sim * 100))
-                    party_note = (
-                        f"Names {pct}% similar — likely the same supplier; verify."
-                        if name_sim >= 0.70
-                        else f"Names only {pct}% similar — may be separate parties, please check."
-                    )
+                party_note = (
+                    "Matched by VAT."
+                    if party_by == "vat"
+                    else f"Names {int(round(name_sim * 100))}% similar."
+                )
                 breakdown = f"Matched: {', '.join(matched)}."
                 if missed:
                     breakdown += f" Not matched: {', '.join(missed)}."
+                pct_conf = int(round(confidence * 100))
                 # Which is the likely original: a PAID copy is already actioned, so
                 # the UNPAID one is the risky duplicate; else the earlier-dated one.
                 # Mirrors the per-contact pass so the UI orders/labels them the same.
@@ -467,14 +506,15 @@ def _find_cross_contact_duplicates(
                     this_c = (subject.vendor_name or "").strip() or "this contact"
                     other_c = (partner.vendor_name or "").strip() or "another contact"
                     message = (
-                        f"Possible duplicate across contacts — '{this_c}' vs "
-                        f"'{other_c}' ({symbol}{amount:.2f}). {breakdown} {party_note}"
+                        f"Possible duplicate ({pct_conf}%) — '{this_c}' and "
+                        f"'{other_c}' ({symbol}{amount:.2f}). {breakdown} {party_note} "
+                        f"{_CROSS_ADVISORY}"
                     )
                     flagged.append(FlaggedIssue(
                         transaction_id=subject.transaction_id,
                         issue_type=issue_type,
                         severity="medium",
-                        message=message[:280],
+                        message=message[:340],
                         confidence=confidence,
                         duplicate_of_transaction_id=partner.transaction_id,
                         duplicate_of_invoice_number=(partner.invoice_number or "").strip() or None,

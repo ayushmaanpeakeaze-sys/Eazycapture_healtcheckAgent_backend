@@ -37,7 +37,10 @@ def test_name_match_same_supplier_flagged():
     assert hits[0].match_reasons["cross_contact"] is True
     assert hits[0].match_reasons["tier"] == "review"
     assert hits[0].match_reasons["party_by"] == "name"
-    assert hits[0].confidence >= 0.90
+    # Honest score: 100% name + amount + same-day + same-description, no reference
+    # (a bill's identifier) → ~0.75, not a fake 100%.
+    assert hits[0].confidence >= 0.70
+    assert hits[0].match_reasons["advisory"]
 
 
 def test_case_only_difference_flagged():
@@ -59,31 +62,37 @@ def test_coincidental_amount_not_flagged():
     assert hits == []
 
 
-def test_strong_content_flags_despite_different_name():
-    # Different names but SAME reference + number + amount + day → same document.
+def test_different_party_names_skipped_despite_matching_content():
+    # Acme vs Zenith (~20% name, no VAT) is below the 60% party gate, so this is
+    # not the "same supplier under two records" case — skipped even though the
+    # reference, number, amount and day all match. Content never overrides party.
     hits = _find_cross_contact_duplicates([
         _doc("B1", "C1", ref="R-9", number="N-9", vendor="Acme"),
         _doc("B2", "C2", ref="R-9", number="N-9", vendor="Zenith"),
     ])
-    assert len(hits) == 2
+    assert hits == []
 
 
 # --- identifier is doc-type aware (bill=reference, sales=invoice number) -----
 
 def test_bill_reference_is_the_identifier():
     # A bill carries no invoice number of its own — the supplier REFERENCE is its
-    # number, so a matching reference is the strong "same document" signal.
+    # number, so a matching reference is the strong "same document" signal. Same
+    # party (100% name after suffix strip), so it clears the party gate and the
+    # matching reference lifts a bill near its ~95% ceiling.
     hits = _find_cross_contact_duplicates([
-        _doc("B1", "C1", ref="SUP-9", vendor="Acme", typ="ACCPAY"),
-        _doc("B2", "C2", ref="SUP-9", vendor="Acme Traders", typ="ACCPAY"),
+        _doc("B1", "C1", ref="SUP-9", vendor="Acme Traders", typ="ACCPAY"),
+        _doc("B2", "C2", ref="SUP-9", vendor="Acme Traders Ltd", typ="ACCPAY"),
     ])
     assert len(hits) == 2
+    assert hits[0].confidence >= 0.90       # bill reference = identifier → high
 
 
-def test_sales_reference_alone_is_weak():
-    # Hamilton/Rex case: two SALES invoices whose reference matches but whose
-    # invoice numbers (the real identifier) differ, under different names → the
-    # reference counts only as weak corroboration, so it stays under the bar.
+def test_hamilton_rex_false_positive_excluded_by_party_gate():
+    # The real demo false-positive: Hamilton Smith Ltd vs Rex Media Group share a
+    # reference (and amount/day) but are different companies (26% name, no VAT).
+    # The 60% party gate cuts them out before content is even scored — content
+    # matching can never resurrect a below-gate name pair.
     hits = _find_cross_contact_duplicates([
         _doc("S1", "C1", ref="R-9", number="INV-1", desc="a",
              vendor="Hamilton Smith Ltd", typ="ACCREC"),
@@ -157,6 +166,8 @@ def test_paid_copy_is_the_likely_original():
     assert original[0].transaction_id == "paid-one"      # PAID copy = keep
     assert hits[0].match_reasons["risk"] == "high"
     assert hits[0].match_reasons["reference_match"] == "exact"
+    # Honest confidence: sales, 81% name, invoice# differs → ~0.74, NOT a fake 1.0.
+    assert 0.70 <= hits[0].confidence < 0.85
 
 
 # --- boundaries --------------------------------------------------------------
