@@ -128,13 +128,17 @@ class AuditSettings:
     # Low-Cost Fixed Asset: a FIXED-asset line BELOW this is too cheap to capitalise.
     low_cost_asset_max: Decimal = Decimal("10000")
     capital_pre_filter_min: Decimal = Decimal("300")
-    # Capital Item Review (mirror): a monitored EXPENSE line ABOVE this may really
-    # be a capital item (fixed asset) mis-coded to an expense account.
+    # Capital Item Review (account-based): a monitored EXPENSE line ABOVE this may
+    # really be a capital item (fixed asset) mis-coded to an expense account.
     capital_item_threshold: Decimal = Decimal("500")
     # Account CODES to watch for capital items (e.g. Repairs, Printing). Empty →
     # fall back to a name-keyword match on expense accounts (repairs / maintenance
     # / printing / stationery).
     capital_monitored_accounts: tuple[str, ...] = ()
+    # Revenue vs Capital review (content-based, SOP): a P&L EXPENSE line ABOVE this
+    # whose description / supplier reads like a capital purchase (laptop, machinery
+    # …) may belong in fixed assets. Independent of the account it sits on.
+    revenue_vs_capital_threshold: Decimal = Decimal("500")
     # --- misallocated items (vague account + material amount) ---
     # --- undocumented bills (no attachment in Xero) -----------------------
     undocumented_min_amount: Decimal = Decimal("0")   # ignore bills under this

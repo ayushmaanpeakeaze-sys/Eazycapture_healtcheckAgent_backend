@@ -25,6 +25,7 @@ IssueType = Literal[
 
     "low_cost_fixed_asset",
     "capital_item_review",
+    "revenue_vs_capital",       # SOP — expense that reads like a capital purchase
     "wrong_category",           # displayed as "Miscategorized Items"
     "misallocated_item",        # deterministic — vague account + material amount
     "undocumented_bill",        # deterministic — supplier bill with no attachment

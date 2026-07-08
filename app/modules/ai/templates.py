@@ -134,6 +134,16 @@ _CONTEXT: dict[str, tuple[str, str]] = {
         "depreciation schedule. If it is a genuine repair or consumable, "
         "dismiss the flag.",
     ),
+    "revenue_vs_capital": (
+        "This expense's description or supplier reads like a capital purchase "
+        "(equipment, machinery, furniture, a vehicle …). Expensing a capital "
+        "item understates your fixed assets, overstates expenses, reduces "
+        "profit, and means you are not claiming the correct capital allowances.",
+        "Review whether the purchase has a useful life beyond one year. If so, "
+        "recode it to the appropriate fixed asset account and set up a "
+        "depreciation schedule. If it is a genuine repair or consumable, "
+        "dismiss the flag.",
+    ),
     "wrong_category": (
         "A transaction posted to the wrong expense or income account will "
         "misstate your profit and loss reporting. Incorrect categorisation "

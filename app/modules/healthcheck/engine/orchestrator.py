@@ -32,6 +32,7 @@ from app.modules.healthcheck.checks.fixed_assets import (
     _find_capital_items,
     _find_low_cost_fixed_assets,
 )
+from app.modules.healthcheck.checks.revenue_vs_capital import _find_revenue_vs_capital
 from app.modules.healthcheck.checks.coding import (
     _find_direction_mismatches,
     _find_misallocated_items,
@@ -193,10 +194,13 @@ async def run_batch_health_check(
     flagged.extend(anomaly_issues)
     # Capital checks (deterministic) run over invoices, bills and bank items:
     # low_cost_fixed_asset flags fixed-asset lines too cheap to capitalise;
-    # capital_item_review flags expense lines too big to expense.
+    # capital_item_review flags big expense lines on monitored accounts;
+    # revenue_vs_capital flags expense lines whose description/supplier reads
+    # capital (SOP). The last two are mutually exclusive per line.
     capital_universe = transactions + bank_transactions
     flagged.extend(_find_low_cost_fixed_assets(capital_universe, coa_type_lookup, coa_lookup, settings))
     flagged.extend(_find_capital_items(capital_universe, coa_lookup, coa_type_lookup, settings))
+    flagged.extend(_find_revenue_vs_capital(capital_universe, coa_lookup, coa_type_lookup, settings))
     # If the LLM anomaly pass didn't run, fall back to the deterministic
     # amount_outlier flags so outliers are still surfaced.
     if (not do_anomaly_llm or anomaly_llm_failed) and run_amount_outlier:
