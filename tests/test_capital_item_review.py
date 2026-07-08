@@ -50,8 +50,8 @@ def test_small_expense_not_flagged():
 
 
 def test_at_threshold_not_flagged():
-    # Exactly £5k is NOT "above" the threshold (strict >).
-    assert _find_capital_items([_tx("1", "473", "5000")], _NAMES, _TYPES) == []
+    # Exactly at the threshold (£500 default) is NOT "above" it (strict >).
+    assert _find_capital_items([_tx("1", "473", "500")], _NAMES, _TYPES) == []
 
 
 def test_big_expense_on_non_suspicious_account_not_flagged():
@@ -103,3 +103,49 @@ def test_no_coa_types_silent_in_keyword_mode():
     # Without account-type info we can't confirm it's an expense → keyword mode
     # flags nothing (we never want to flag a non-expense line).
     assert _find_capital_items([_tx("1", "473", "90000")], _NAMES, {}) == []
+
+
+# --- SOP: description / supplier keyword detection + exclusions ---------------
+# 400 = plain "Office Expenses" (EXPENSE but NOT a monitored/keyword account), so
+# only the description or supplier signal can flag these.
+
+def _desc_tx(tid, amt, desc, *, code="400", vendor="Acme"):
+    return BatchTransaction(
+        transaction_id=tid, date=date(2026, 1, 1), description=desc,
+        amount=Decimal(str(amt)), vendor_name=vendor, type="ACCPAY",
+        contact_id="C1", current_account_code=code,
+    )
+
+
+def test_sop_laptop_flagged():
+    hits = _find_capital_items([_desc_tx("1", 1200, "Dell laptop purchase", vendor="Dell")], _NAMES, _TYPES)
+    assert len(hits) == 1
+    assert hits[0].match_reasons["matched_keyword"] == "laptop"
+
+
+def test_sop_vehicle_servicing_excluded():
+    # "vehicle" is capital, but "servicing" / "repair" is a revenue exclusion.
+    assert _find_capital_items([_desc_tx("1", 900, "Vehicle servicing and repair")], _NAMES, _TYPES) == []
+
+
+def test_sop_office_furniture_flagged():
+    assert len(_find_capital_items([_desc_tx("1", 750, "Office furniture - chairs", vendor="IKEA")], _NAMES, _TYPES)) == 1
+
+
+def test_sop_below_threshold_ignored():
+    assert _find_capital_items([_desc_tx("1", 300, "Dell laptop", vendor="Dell")], _NAMES, _TYPES) == []
+
+
+def test_sop_no_capital_signal_ignored():
+    assert _find_capital_items([_desc_tx("1", 600, "Monthly subscription fee", vendor="Netflix")], _NAMES, _TYPES) == []
+
+
+def test_sop_exclusion_beats_keyword():
+    assert _find_capital_items([_desc_tx("1", 800, "Machinery repair")], _NAMES, _TYPES) == []
+
+
+def test_sop_supplier_signal_flags():
+    # No obvious keyword, but a known capital supplier + above threshold.
+    hits = _find_capital_items([_desc_tx("1", 1500, "Order 4471", vendor="Currys")], _NAMES, _TYPES)
+    assert len(hits) == 1
+    assert hits[0].match_reasons["matched_supplier"] == "currys"

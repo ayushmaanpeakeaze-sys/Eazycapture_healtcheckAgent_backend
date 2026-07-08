@@ -3,8 +3,10 @@
 Two checks, each = account TYPE + line AMOUNT, pure deterministic (no LLM):
   * ``low_cost_fixed_asset``  — a line in a FIXED-asset account BELOW the
     capitalisation threshold (probably should be expensed).
-  * ``capital_item_review``   — a line in a monitored EXPENSE account ABOVE the
-    threshold (may really be a capital item / fixed asset).
+  * ``capital_item_review``   — Revenue vs Capital: a P&L EXPENSE line above the
+    threshold that reads like a fixed asset (a capital keyword in the description
+    / reference / supplier, or a monitored account), obvious revenue spend
+    excluded — flagged for capitalisation review.
 
 Detection logic + tunable settings + registry metadata all live here.
 """
@@ -13,6 +15,11 @@ from __future__ import annotations
 from app.modules.healthcheck.checks.base import SettingField
 from app.shared.transaction import BatchTransaction, FlaggedIssue
 from app.modules.healthcheck.engine.shared import _account_lines, _EXPENSE_ACCOUNT_TYPES
+from app.modules.healthcheck.checks.capital_keywords import (
+    has_revenue_exclusion,
+    matched_capital_keyword,
+    matched_capital_supplier,
+)
 
 _FIXED_ASSET_TYPES = frozenset({"FIXED", "FIXEDASSET"})
 _CAPITAL_REVIEW_KEYWORDS = ("repair", "maintenance", "printing", "stationery")
@@ -92,13 +99,17 @@ def _find_capital_items(
     coa_type_lookup: dict[str, str],
     settings=None,
 ) -> list[FlaggedIssue]:
-    """Mirror of low_cost_fixed_asset: a line posted to a MONITORED EXPENSE
-    account for an amount ABOVE the threshold (``capital_item_threshold``) — it
-    may really be a capital item (fixed asset) mis-coded to an expense.
+    """Revenue vs Capital review (per the SOP): a P&L EXPENSE line above the
+    threshold that looks like a fixed asset mis-coded to an expense.
 
-    Monitored = the codes in ``capital_monitored_accounts`` when set, else any
-    EXPENSE-type account whose name looks capital-suspicious (repairs / printing
-    / maintenance / stationery)."""
+    Only P&L expense accounts, only amounts above ``capital_item_threshold``, and
+    obvious revenue spend (repairs / servicing / fuel / insurance / consumables)
+    is excluded first. A line is then flagged for review when any signal fires:
+    it is posted to a monitored/suspicious account (repairs / printing … or a
+    ``capital_monitored_accounts`` code), OR its description / reference / supplier
+    reads like a capital purchase (a capital keyword, or a known capital supplier).
+    Always a review flag — never auto-capitalised.
+    """
     settings = _settings(settings)
     threshold = settings.capital_item_threshold
     monitored = {c.strip().upper() for c in settings.capital_monitored_accounts if c.strip()}
@@ -106,40 +117,56 @@ def _find_capital_items(
     for tx in transactions:
         currency = (tx.currency_code or "GBP").strip().upper()
         symbol = "£" if currency == "GBP" else f"{currency} "
+        supplier = (tx.vendor_name or "").strip()
+        doc_text = " ".join(p for p in (tx.description, tx.reference, supplier) if p)
         for line_no, code, amount in _account_lines(tx):
             code = (code or "").strip()
             if not code or amount is None:
                 continue
-            name = coa_lookup.get(code) or code
-            if monitored:
-                if code.upper() not in monitored:
-                    continue
-            else:
-                if (coa_type_lookup.get(code) or "").strip().upper() not in _EXPENSE_ACCOUNT_TYPES:
-                    continue
-                if not any(k in name.lower() for k in _CAPITAL_REVIEW_KEYWORDS):
-                    continue
+            if (coa_type_lookup.get(code) or "").strip().upper() not in _EXPENSE_ACCOUNT_TYPES:
+                continue  # SOP: P&L expense accounts only
             amt = abs(amount)
             if amt <= threshold:
+                continue  # SOP: amount threshold — low-value items ignored
+            name = coa_lookup.get(code) or code
+            if has_revenue_exclusion(doc_text):
+                continue  # SOP exclusions: repairs / fuel / insurance / consumables
+            # (exclusion is on the DOC text, not the account name — a "Repairs &
+            #  Maintenance" account is monitored, its name must not self-exclude.)
+
+            if monitored:                       # explicit codes configured → only those
+                monitored_hit = code.upper() in monitored
+            else:                               # else auto-watch capital-suspicious names
+                monitored_hit = any(k in name.lower() for k in _CAPITAL_REVIEW_KEYWORDS)
+            keyword = matched_capital_keyword(doc_text)
+            supplier_hit = matched_capital_supplier(supplier)
+            if not (monitored_hit or keyword or supplier_hit):
                 continue
+
+            signals: list[str] = []
+            if keyword:
+                signals.append(f"description mentions '{keyword}'")
+            if supplier_hit:
+                signals.append(f"supplier '{supplier}' commonly sells assets")
+            if monitored_hit:
+                signals.append(f"account {code} ({name}) often hides capital items")
+            why = "; ".join(signals)
             flagged.append(FlaggedIssue(
                 transaction_id=tx.transaction_id,
                 issue_type="capital_item_review",
                 severity="medium",
                 message=(
-                    f"{tx.vendor_name}: {symbol}{amt:.2f} posted to expense account "
-                    f"{code} ({name}) — above the {symbol}{threshold:.0f} threshold; "
-                    f"may be a capital item (fixed asset), not an expense."
+                    f"{supplier or 'This'}: {symbol}{amt:.2f} on expense account "
+                    f"{code} ({name}) — {why}. Review whether to capitalise as a "
+                    f"fixed asset instead of expensing."
                 )[:200],
                 current_code=code,
                 reasoning=(
-                    f"This line sits in {code} ({name}) — an expense account — "
-                    f"but {symbol}{amt:.2f} is above your {symbol}{threshold:.0f} "
-                    f"threshold, so it may really be a capital item that should be "
-                    f"a FIXED asset (capitalised + depreciated), not expensed in "
-                    f"one go. Recommended: review and, if it is an asset, re-code "
-                    f"it to a fixed-asset account. There is no single correct "
-                    f"target, so this is a suggestion to review (hence the '?')."
+                    f"{symbol}{amt:.2f} is above the {symbol}{threshold:.0f} capital "
+                    f"threshold and {why}, so this may be a capital item that should "
+                    f"be a FIXED asset (capitalised + depreciated), not expensed in "
+                    f"one go. Recommended: review and, if it is an asset, re-code it "
+                    f"to a fixed-asset account."
                 ),
                 match_reasons={
                     "line_no": line_no,
@@ -149,6 +176,9 @@ def _find_capital_items(
                     "line_amount": f"{amt:.2f}",
                     "threshold": f"{threshold:.2f}",
                     "currency": currency,
+                    "matched_keyword": keyword,
+                    "matched_supplier": supplier_hit,
+                    "monitored_account": monitored_hit,
                     "recommended_action": "capitalise",
                     "recode_to_account_type": "FIXED",
                 },
@@ -167,9 +197,11 @@ SETTING_FIELDS: tuple[SettingField, ...] = (
                  unit="currency", min=0, step=100),
     SettingField("capital_item_threshold", "Fixed Assets", "capital_item_review",
                  "Flag expense over …", "amount",
-                 "Flag a line posted to a monitored EXPENSE account for more than "
-                 "this amount — it may really be a capital item (fixed asset). "
-                 "Mirror of the low-cost fixed-asset check. Default 5,000.",
+                 "Review any P&L expense above this amount whose description, "
+                 "reference or supplier looks like a capital purchase (laptop, "
+                 "machinery, furniture, vehicle …) — it may belong in fixed assets. "
+                 "Obvious revenue spend (repairs, fuel, insurance) is excluded. "
+                 "Default 500.",
                  unit="currency", min=0, step=100),
     SettingField("capital_monitored_accounts", "Fixed Assets", "capital_item_review",
                  "Monitored expense accounts", "list",
@@ -182,5 +214,5 @@ SETTING_FIELDS: tuple[SettingField, ...] = (
 # --- registry metadata (key, label, built) -----------------------------------
 META: tuple[tuple[str, str, bool], ...] = (
     ("low_cost_fixed_asset", "Low-cost fixed asset", True),
-    ("capital_item_review", "Capital item review", True),
+    ("capital_item_review", "Revenue vs Capital review", True),
 )

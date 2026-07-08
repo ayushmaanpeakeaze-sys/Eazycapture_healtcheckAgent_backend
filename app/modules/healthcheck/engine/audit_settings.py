@@ -130,7 +130,7 @@ class AuditSettings:
     capital_pre_filter_min: Decimal = Decimal("300")
     # Capital Item Review (mirror): a monitored EXPENSE line ABOVE this may really
     # be a capital item (fixed asset) mis-coded to an expense account.
-    capital_item_threshold: Decimal = Decimal("5000")
+    capital_item_threshold: Decimal = Decimal("500")
     # Account CODES to watch for capital items (e.g. Repairs, Printing). Empty →
     # fall back to a name-keyword match on expense accounts (repairs / maintenance
     # / printing / stationery).
