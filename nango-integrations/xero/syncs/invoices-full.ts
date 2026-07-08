@@ -13,14 +13,20 @@ import * as z from 'zod';
  *
  * `journals.read` scope / GL workaround NOT needed — this is the plain
  * Accounting `/Invoices` read (scope already granted).
+ *
+ * NOT auto-run. The backend fetches invoices on-demand via the
+ * `list-invoices-full` ACTION (SyncEngine → our DB), so this continuous sync was
+ * redundant and burned an hourly run for records nothing consumed. Kept deployed
+ * with `autoStart: false` as an on-demand fallback ONLY — trigger it manually
+ * (Nango `triggerSync`) for an org so large that action pagination is too slow.
  */
 const Invoice = z.object({ id: z.string() }).passthrough();
 
 export default createSync({
-    description: 'Sync Xero invoices/bills with full line items (recovers what the pre-built sync strips).',
+    description: 'On-demand fallback: Xero invoices/bills with full line items. Backend normally uses the list-invoices-full action; trigger this only for very large orgs.',
     version: '1.0.0',
     frequency: 'every hour',
-    autoStart: true,
+    autoStart: false,
     syncType: 'incremental',
     trackDeletes: false,
     endpoints: [{ method: 'GET', path: '/invoices-full' }],
