@@ -111,12 +111,34 @@ class SyncResult:
 
 # --- page fetchers -------------------------------------------------------
 
-def _inc(method_name: str) -> PageFetcher:
-    """Incremental fetcher → the deployed ``list-*-full`` action (honours
-    If-Modified-Since via ``modifiedSince``), tenant passed per-call."""
+def _inc_fb(action_name: str, proxy_name: str, *, paged: bool = True) -> PageFetcher:
+    """Action-first fetcher with a proxy fallback. Normally the deployed
+    ``list-*-full`` action serves each page (honouring If-Modified-Since); if the
+    action returns nothing on page 1 — e.g. it is disabled on Nango — the same
+    data is pulled through the proxy instead, so the sync keeps working. ``paged``
+    proxies are looped page-by-page; single-call proxies return everything at once.
+    """
     async def _f(nango, conn, tenant, page, since):
-        method = getattr(nango, method_name)
-        return await method(conn, tenant_id=tenant, page=page, modified_since=since)
+        rows = await getattr(nango, action_name)(conn, tenant_id=tenant, page=page, modified_since=since)
+        if rows:
+            return rows
+        if page != 1:
+            return []  # action empty on a later page = end (page 1 already did the fallback)
+        proxy = getattr(nango, proxy_name)
+        try:
+            if not paged:
+                return await proxy(conn, tenant)
+            out: list = []
+            p = 1
+            while p <= 200:  # safety cap (~20k records at 100/page)
+                batch = await proxy(conn, tenant, p)
+                if not batch:
+                    break
+                out.extend(batch)
+                p += 1
+            return out
+        except Exception:
+            return []
     return _f
 
 
@@ -156,22 +178,25 @@ async def _fetch_org(nango, conn, tenant, page, since):
 
 
 # The eight mirrored entities. First five are incremental (actions honour the
-# watermark); last three are small / watermark-less → full-refresh via their own
-# actions, with the proxy kept only as a fallback if an action returns nothing.
+# watermark); last three are small / watermark-less. EVERY entity is action-first
+# with a proxy fallback, so a disabled or failing action (e.g. a Nango plan limit)
+# transparently drops to the proxy and the sync keeps pulling data.
 ENTITY_SPECS: dict[str, EntitySpec] = {
     "invoice": EntitySpec(
-        "invoice", "incremental", "InvoiceID", _inc("action_list_invoices_full")),
+        "invoice", "incremental", "InvoiceID",
+        _inc_fb("action_list_invoices_full", "fetch_xero_invoices_page")),
     "bank_transaction": EntitySpec(
         "bank_transaction", "incremental", "BankTransactionID",
-        _inc("action_list_bank_transactions_full")),
+        _inc_fb("action_list_bank_transactions_full", "fetch_xero_bank_transactions_page")),
     "credit_note": EntitySpec(
         "credit_note", "incremental", "CreditNoteID",
-        _inc("action_list_credit_notes_full")),
+        _inc_fb("action_list_credit_notes_full", "fetch_xero_credit_notes_page")),
     "contact": EntitySpec(
-        "contact", "incremental", "ContactID", _inc("action_list_contacts_full")),
+        "contact", "incremental", "ContactID",
+        _inc_fb("action_list_contacts_full", "fetch_xero_contacts", paged=False)),
     "account": EntitySpec(
         "account", "incremental", "AccountID",
-        _inc("action_list_accounts_full"), paginates=False),
+        _inc_fb("action_list_accounts_full", "fetch_xero_accounts", paged=False), paginates=False),
     "tax_rate": EntitySpec(
         "tax_rate", "full", "TaxType", _fetch_tax_rates, paginates=False),
     "payment": EntitySpec(
