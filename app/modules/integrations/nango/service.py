@@ -370,6 +370,30 @@ class NangoService:
         return await self._action_list_full(
             connection_id, "list-credit-notes-full", "creditNotes", tenant_id, page, where, modified_since)
 
+    async def action_list_tax_rates(
+        self, connection_id: str, tenant_id: Optional[str] = None, page: int = 1,
+        where: Optional[str] = None, modified_since: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """``list-tax-rates`` — every Xero tax rate (single page, Xero doesn't paginate)."""
+        return await self._action_list_full(
+            connection_id, "list-tax-rates", "taxRates", tenant_id, page, where, modified_since)
+
+    async def action_list_payments(
+        self, connection_id: str, tenant_id: Optional[str] = None, page: int = 1,
+        where: Optional[str] = None, modified_since: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """``list-payments`` — Xero payments, one page (IsReconciled + settled invoice)."""
+        return await self._action_list_full(
+            connection_id, "list-payments", "payments", tenant_id, page, where, modified_since)
+
+    async def action_list_organisation(
+        self, connection_id: str, tenant_id: Optional[str] = None, page: int = 1,
+        where: Optional[str] = None, modified_since: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """``list-organisation`` — the Xero organisation record (single page)."""
+        return await self._action_list_full(
+            connection_id, "list-organisation", "organisations", tenant_id, page, where, modified_since)
+
     async def action_get_trial_balance(
         self,
         connection_id: str,

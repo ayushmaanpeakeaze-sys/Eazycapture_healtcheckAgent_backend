@@ -121,22 +121,32 @@ def _inc(method_name: str) -> PageFetcher:
 
 
 async def _fetch_tax_rates(nango, conn, tenant, page, since):
-    return await nango.fetch_xero_tax_rates(conn, tenant) if page == 1 else []
+    if page != 1:
+        return []
+    rows = await nango.action_list_tax_rates(conn, tenant_id=tenant)
+    return rows or await nango.fetch_xero_tax_rates(conn, tenant)  # action first, proxy fallback
 
 
 async def _fetch_payments(nango, conn, tenant, page, since):
-    return await nango.fetch_xero_payments_page(conn, tenant, page)
+    rows = await nango.action_list_payments(conn, tenant_id=tenant, page=page)
+    if not rows and page == 1:
+        return await nango.fetch_xero_payments_page(conn, tenant, page)  # proxy fallback
+    return rows
 
 
 async def _fetch_org(nango, conn, tenant, page, since):
     if page != 1:
         return []
-    org = await nango.fetch_xero_organisation(conn, tenant)
+    rows = await nango.action_list_organisation(conn, tenant_id=tenant)
+    if rows:
+        return rows
+    org = await nango.fetch_xero_organisation(conn, tenant)  # proxy fallback
     return [org] if isinstance(org, dict) and org else []
 
 
 # The eight mirrored entities. First five are incremental (actions honour the
-# watermark); last three are small / watermark-less → full-refresh via proxy.
+# watermark); last three are small / watermark-less → full-refresh via their own
+# actions, with the proxy kept only as a fallback if an action returns nothing.
 ENTITY_SPECS: dict[str, EntitySpec] = {
     "invoice": EntitySpec(
         "invoice", "incremental", "InvoiceID", _inc("action_list_invoices_full")),
