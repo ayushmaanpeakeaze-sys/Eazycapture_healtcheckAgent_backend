@@ -55,3 +55,19 @@ def collect_category_setting_fields() -> tuple[SettingField, ...]:
         mod = importlib.import_module(f"app.modules.healthcheck.checks.{name}")
         out.extend(getattr(mod, "SETTING_FIELDS", ()))
     return tuple(out)
+
+
+def collect_issue_labels() -> dict[str, str]:
+    """issue_type → human label, gathered from every category module's ``META``
+    (``(issue_type, label, enabled)``). Lets a report show a readable "Check"
+    name instead of the raw issue_type. Lazy import, same reason as above.
+    """
+    import importlib
+
+    labels: dict[str, str] = {}
+    for name in _CATEGORY_MODULES:
+        mod = importlib.import_module(f"app.modules.healthcheck.checks.{name}")
+        for entry in getattr(mod, "META", ()):
+            if len(entry) >= 2:
+                labels[str(entry[0])] = str(entry[1])
+    return labels

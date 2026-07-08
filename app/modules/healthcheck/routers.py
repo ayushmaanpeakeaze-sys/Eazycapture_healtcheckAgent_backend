@@ -13,7 +13,7 @@ from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,6 +66,7 @@ from app.modules.healthcheck.services.reenrich_service import ReenrichService
 from app.modules.healthcheck.services.attachment_service import AttachmentService
 from app.modules.healthcheck.services.resolve_service import ResolveService
 from app.modules.healthcheck.services.suggest_fix_service import SuggestFixService
+from app.modules.healthcheck.services.report_service import HealthCheckReportService
 from app.modules.healthcheck.services.trapped_service import TrappedInvoiceService
 
 router = APIRouter(
@@ -700,6 +701,29 @@ async def list_trapped_invoices(
         include_marked_ok=include_marked_ok,
         issue_type=issue_type,
         exclude_bank_items=exclude_bank_items,
+    )
+
+
+@router.get(
+    "/report/csv/",
+    summary="Download this company's open health-check issues as a CSV (grouped by check).",
+)
+async def download_report_csv(
+    company_id: UUID = Depends(get_current_company_id),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """One company's open issues as a CSV, grouped by check for Excel.
+
+    Scoped entirely by ``get_current_company_id`` — a user only ever downloads a
+    company in their own firm (admin) or one assigned to them (team member), never
+    another tenant's data. One company per file; no cross-company mixing.
+    """
+    service = HealthCheckReportService(db)
+    content, filename = await service.build_csv(company_id)
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
