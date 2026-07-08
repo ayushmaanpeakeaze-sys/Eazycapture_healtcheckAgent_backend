@@ -124,14 +124,22 @@ async def _fetch_tax_rates(nango, conn, tenant, page, since):
     if page != 1:
         return []
     rows = await nango.action_list_tax_rates(conn, tenant_id=tenant)
-    return rows or await nango.fetch_xero_tax_rates(conn, tenant)  # action first, proxy fallback
+    if rows:
+        return rows
+    try:
+        return await nango.fetch_xero_tax_rates(conn, tenant)  # proxy fallback
+    except Exception:
+        return []  # dead/expired connection → empty, like the action-only entities
 
 
 async def _fetch_payments(nango, conn, tenant, page, since):
     rows = await nango.action_list_payments(conn, tenant_id=tenant, page=page)
-    if not rows and page == 1:
-        return await nango.fetch_xero_payments_page(conn, tenant, page)  # proxy fallback
-    return rows
+    if rows or page > 1:
+        return rows
+    try:
+        return await nango.fetch_xero_payments_page(conn, tenant, page)  # proxy fallback (page 1)
+    except Exception:
+        return []
 
 
 async def _fetch_org(nango, conn, tenant, page, since):
@@ -140,7 +148,10 @@ async def _fetch_org(nango, conn, tenant, page, since):
     rows = await nango.action_list_organisation(conn, tenant_id=tenant)
     if rows:
         return rows
-    org = await nango.fetch_xero_organisation(conn, tenant)  # proxy fallback
+    try:
+        org = await nango.fetch_xero_organisation(conn, tenant)  # proxy fallback
+    except Exception:
+        return []
     return [org] if isinstance(org, dict) and org else []
 
 
