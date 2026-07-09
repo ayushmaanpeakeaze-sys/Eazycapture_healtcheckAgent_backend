@@ -299,15 +299,8 @@ def _reshape_bank_txn_to_batch(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
 
 
 def _reshape_journal_to_batch(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
-    """Map a raw Xero Journal → the batch shape, but ONLY manual journals
-    (``SourceType == MANJOURNAL``), tagged type ``MANJOURNAL``.
-
-    Every other journal (ACCPAY / ACCREC / CASHREC / CASHPAID …) simply mirrors an
-    invoice / bill / bank transaction we already audit, so keeping ONLY MANJOURNAL
-    avoids double-counting while still catching a capital item booked straight to
-    the ledger by hand (the SOP's /Journals completeness gap). The orchestrator
-    routes MANJOURNAL into the capital universe only, so no other check sees it.
-    """
+    """Raw Xero Journal → batch shape, ONLY manual journals (SourceType
+    MANJOURNAL) so invoices/bills/bank txns aren't double-counted."""
     if not isinstance(raw, dict):
         return None
     if (raw.get("SourceType") or "").strip().upper() != "MANJOURNAL":
@@ -327,8 +320,7 @@ def _reshape_journal_to_batch(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
         for li in lines
         if isinstance(li, dict)
     ]
-    # Journal-level description = the first non-empty line narration (the capital
-    # keyword usually lives there); the biggest line is the headline amount.
+    # first non-empty line narration (keyword lives here); biggest line = amount
     desc = next(
         (str(li.get("Description")).strip() for li in lines
          if isinstance(li, dict) and (li.get("Description") or "").strip()),
@@ -749,8 +741,7 @@ def _db_org_context(company_id: UUID) -> dict[str, Any]:
             accounts_raw = db_read.read_raw(s, company_id, "account")
             tax_rates_raw = db_read.read_raw(s, company_id, "tax_rate")
             org = db_read.read_organisation(s, company_id)
-            # Fixed-asset register (SOP Step 7): drop capital flags for items
-            # already capitalised. Empty until the assets.read scope is granted.
+            # fixed-asset register (SOP Step 7 dedup); empty until assets.read granted
             assets_raw = db_read.read_raw(s, company_id, "asset")
         coa = _map_xero_accounts(accounts_raw)
         tax_rates = _map_xero_tax_rates(tax_rates_raw)
@@ -825,11 +816,8 @@ def _drop_already_capitalised(
     transactions: list[dict[str, Any]],
     assets: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """SOP Step 7 — remove a capital flag when the item is ALREADY on the
-    fixed-asset register. Conservative: drops ONLY on a strong match — same value
-    (±£1) AND purchase date within 30 days — so a genuine flag is never suppressed
-    by a loose coincidence. No assets synced (scope not granted) → nothing dropped.
-    """
+    """SOP Step 7 — drop a capital flag when the item is already on the fixed-asset
+    register (strong match only: value ±£1 AND purchase date within 30 days)."""
     if not assets or not flagged:
         return flagged
     registered: list[tuple[float, Optional[date]]] = []

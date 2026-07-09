@@ -111,10 +111,8 @@ async def run_batch_health_check(
         if not transactions:
             return BatchHealthCheckResponse(flagged=[])
 
-    # Split out bank transactions (Money In / Money Out) and manual journals
-    # (MANJOURNAL — the SOP capital-in-the-ledger source). Most checks keep seeing
-    # only invoices/bills/credits, so they never flag a bank txn or a journal;
-    # bank txns rejoin a few checks below, journals ONLY the capital universe.
+    # Split out bank txns and manual journals; most checks see only invoices/bills.
+    # Bank txns rejoin a few checks below; journals go ONLY to the capital universe.
     bank_transactions = [
         t for t in transactions if (t.type or "").strip().upper() in _BANK_TXN_TYPES
     ]
