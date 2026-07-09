@@ -298,6 +298,61 @@ def _reshape_bank_txn_to_batch(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+def _reshape_journal_to_batch(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Map a raw Xero Journal → the batch shape, but ONLY manual journals
+    (``SourceType == MANJOURNAL``), tagged type ``MANJOURNAL``.
+
+    Every other journal (ACCPAY / ACCREC / CASHREC / CASHPAID …) simply mirrors an
+    invoice / bill / bank transaction we already audit, so keeping ONLY MANJOURNAL
+    avoids double-counting while still catching a capital item booked straight to
+    the ledger by hand (the SOP's /Journals completeness gap). The orchestrator
+    routes MANJOURNAL into the capital universe only, so no other check sees it.
+    """
+    if not isinstance(raw, dict):
+        return None
+    if (raw.get("SourceType") or "").strip().upper() != "MANJOURNAL":
+        return None
+    jid = (raw.get("JournalID") or "").strip()
+    lines = raw.get("JournalLines") or []
+    if not jid or not isinstance(lines, list) or not lines:
+        return None
+    batch_lines = [
+        {
+            "account_code": _str_or_none(li.get("AccountCode")),
+            "tax_code": None,
+            "amount": _str_or_none(li.get("NetAmount")),
+            "tax_amount": _str_or_none(li.get("TaxAmount")),
+            "description": _str_or_none(li.get("Description")),
+        }
+        for li in lines
+        if isinstance(li, dict)
+    ]
+    # Journal-level description = the first non-empty line narration (the capital
+    # keyword usually lives there); the biggest line is the headline amount.
+    desc = next(
+        (str(li.get("Description")).strip() for li in lines
+         if isinstance(li, dict) and (li.get("Description") or "").strip()),
+        "Manual journal entry",
+    )
+    biggest = max(
+        (abs(float(li.get("NetAmount") or 0)) for li in lines if isinstance(li, dict)),
+        default=0.0,
+    )
+    return {
+        "transaction_id": jid,
+        "date": _xero_date(raw.get("JournalDate")) or datetime.now(timezone.utc).date().isoformat(),
+        "description": desc[:1000] or "Manual journal entry",
+        "amount": f"{biggest:.2f}",
+        "vendor_name": "Manual journal",
+        "contact_id": None,
+        "reference": None,
+        "current_account_code": batch_lines[0]["account_code"] if batch_lines else None,
+        "currency_code": "GBP",
+        "type": "MANJOURNAL",
+        "line_items": batch_lines,
+    }
+
+
 def _payment_and_edit_state(transaction: dict[str, Any]) -> dict[str, Any]:
     """Compute paid/unpaid status + whether we can edit the line via the API.
 
@@ -405,12 +460,17 @@ def _fetch_audit_transactions(
         and db_read.has_synced_documents(db, company.id)
     ):
         docs, raw_bank_txns = db_read.read_documents(db, company.id)
+        raw_journals = db_read.read_raw(db, company.id, "journal")
         shaped = [_reshape_xero_to_batch(raw) for raw in docs]
         shaped += [_reshape_bank_txn_to_batch(raw) for raw in raw_bank_txns]
+        # Manual journals (MANJOURNAL only) — the SOP's capital-in-the-ledger gap.
+        shaped += [_reshape_journal_to_batch(raw) for raw in raw_journals]
         transactions = [tx for tx in shaped if tx is not None]
+        n_journals = sum(1 for tx in shaped if tx is not None and tx.get("type") == "MANJOURNAL")
         logger.info(
-            "[SuHe][Audit] Loaded %d doc(s) + %d bank txn(s) from DB sync for company=%s",
-            len(docs), len(raw_bank_txns), company.id,
+            "[SuHe][Audit] Loaded %d doc(s) + %d bank txn(s) + %d manual journal(s) "
+            "from DB sync for company=%s",
+            len(docs), len(raw_bank_txns), n_journals, company.id,
         )
         return transactions, "db"
 
@@ -689,6 +749,9 @@ def _db_org_context(company_id: UUID) -> dict[str, Any]:
             accounts_raw = db_read.read_raw(s, company_id, "account")
             tax_rates_raw = db_read.read_raw(s, company_id, "tax_rate")
             org = db_read.read_organisation(s, company_id)
+            # Fixed-asset register (SOP Step 7): drop capital flags for items
+            # already capitalised. Empty until the assets.read scope is granted.
+            assets_raw = db_read.read_raw(s, company_id, "asset")
         coa = _map_xero_accounts(accounts_raw)
         tax_rates = _map_xero_tax_rates(tax_rates_raw)
         base_currency = (
@@ -698,14 +761,16 @@ def _db_org_context(company_id: UUID) -> dict[str, Any]:
             (org.get("ShortCode") or "").strip() if isinstance(org, dict) else ""
         ) or None
         logger.info(
-            "[SuHe][Audit] loaded COA (%d accounts), %d tax rates, base_currency=%s "
-            "from DB sync", len(coa), len(tax_rates), base_currency,
+            "[SuHe][Audit] loaded COA (%d accounts), %d tax rates, %d asset(s), "
+            "base_currency=%s from DB sync", len(coa), len(tax_rates), len(assets_raw),
+            base_currency,
         )
         return {
             "coa": coa,
             "tax_rates": tax_rates,
             "base_currency": base_currency,
             "shortcode": shortcode,
+            "assets": assets_raw,
         }
     except Exception:
         logger.exception(
@@ -739,6 +804,72 @@ def _build_context(
 # =====================================================================
 # AI-service HTTP calls
 # =====================================================================
+
+# Capital flags eligible for the SOP fixed-asset dedup (Step 7).
+_CAPITAL_ISSUE_TYPES = {"capital_item_review", "revenue_vs_capital"}
+
+
+def _as_date(value: Any) -> Optional[date]:
+    """Best-effort parse of a Xero/ISO date string → date (None if unparseable)."""
+    if not value:
+        return None
+    iso = _xero_date(str(value).strip()) or str(value).strip()
+    try:
+        return date.fromisoformat(iso[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _drop_already_capitalised(
+    flagged: list[dict[str, Any]],
+    transactions: list[dict[str, Any]],
+    assets: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """SOP Step 7 — remove a capital flag when the item is ALREADY on the
+    fixed-asset register. Conservative: drops ONLY on a strong match — same value
+    (±£1) AND purchase date within 30 days — so a genuine flag is never suppressed
+    by a loose coincidence. No assets synced (scope not granted) → nothing dropped.
+    """
+    if not assets or not flagged:
+        return flagged
+    registered: list[tuple[float, Optional[date]]] = []
+    for a in assets:
+        if not isinstance(a, dict):
+            continue
+        try:
+            price = abs(float(a.get("purchasePrice")))
+        except (TypeError, ValueError):
+            continue
+        registered.append((price, _as_date(a.get("purchaseDate"))))
+    if not registered:
+        return flagged
+    tx_date = {
+        t.get("transaction_id"): _as_date(t.get("date"))
+        for t in transactions if isinstance(t, dict)
+    }
+
+    def _already_capitalised(flag: dict[str, Any]) -> bool:
+        if flag.get("issue_type") not in _CAPITAL_ISSUE_TYPES:
+            return False
+        mr = flag.get("match_reasons") or {}
+        try:
+            amt = abs(float(mr.get("line_amount")))
+        except (TypeError, ValueError):
+            return False
+        fdate = tx_date.get(flag.get("transaction_id"))
+        for price, adate in registered:
+            if abs(price - amt) <= 1.0 and fdate and adate and abs((fdate - adate).days) <= 30:
+                return True
+        return False
+
+    kept = [f for f in flagged if not _already_capitalised(f)]
+    if len(kept) != len(flagged):
+        logger.info(
+            "[SuHe][Audit] SOP asset-dedup dropped %d already-capitalised flag(s)",
+            len(flagged) - len(kept),
+        )
+    return kept
+
 
 def _call_rules_batch(
     transactions: list[dict[str, Any]],
@@ -804,6 +935,8 @@ def _call_rules_batch(
                 len(chunk),
             )
             continue
+    # SOP Step 7: drop capital flags for items already on the fixed-asset register.
+    flagged = _drop_already_capitalised(flagged, transactions, (org_ctx or {}).get("assets") or [])
     return flagged
 
 

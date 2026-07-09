@@ -111,13 +111,20 @@ async def run_batch_health_check(
         if not transactions:
             return BatchHealthCheckResponse(flagged=[])
 
-    # Split out bank transactions (Money In / Money Out); most checks keep
-    # seeing only invoices/bills/credits so they never flag a bank transaction.
+    # Split out bank transactions (Money In / Money Out) and manual journals
+    # (MANJOURNAL — the SOP capital-in-the-ledger source). Most checks keep seeing
+    # only invoices/bills/credits, so they never flag a bank txn or a journal;
+    # bank txns rejoin a few checks below, journals ONLY the capital universe.
     bank_transactions = [
         t for t in transactions if (t.type or "").strip().upper() in _BANK_TXN_TYPES
     ]
+    manual_journals = [
+        t for t in transactions if (t.type or "").strip().upper() == "MANJOURNAL"
+    ]
     transactions = [
-        t for t in transactions if (t.type or "").strip().upper() not in _BANK_TXN_TYPES
+        t for t in transactions
+        if (t.type or "").strip().upper() not in _BANK_TXN_TYPES
+        and (t.type or "").strip().upper() != "MANJOURNAL"
     ]
 
     # Per-transaction deterministic rules (no LLM): tax/vendor/required-field checks.
@@ -197,7 +204,7 @@ async def run_batch_health_check(
     # capital_item_review flags big expense lines on monitored accounts;
     # revenue_vs_capital flags expense lines whose description/supplier reads
     # capital (SOP). The last two are mutually exclusive per line.
-    capital_universe = transactions + bank_transactions
+    capital_universe = transactions + bank_transactions + manual_journals
     flagged.extend(_find_low_cost_fixed_assets(capital_universe, coa_type_lookup, coa_lookup, settings))
     flagged.extend(_find_capital_items(capital_universe, coa_lookup, coa_type_lookup, settings))
     flagged.extend(_find_revenue_vs_capital(capital_universe, coa_lookup, coa_type_lookup, settings))
