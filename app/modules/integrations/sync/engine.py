@@ -177,10 +177,41 @@ async def _fetch_org(nango, conn, tenant, page, since):
     return [org] if isinstance(org, dict) and org else []
 
 
-# The eight mirrored entities. First five are incremental (actions honour the
-# watermark); last three are small / watermark-less. EVERY entity is action-first
-# with a proxy fallback, so a disabled or failing action (e.g. a Nango plan limit)
-# transparently drops to the proxy and the sync keeps pulling data.
+# Journals + Assets (SOP) need extra Xero scopes (accounting.journals.read /
+# assets.read) that a connection may not have yet. Both action AND proxy are
+# wrapped so a missing scope just yields 0 records — it never surfaces an auth
+# error that would falsely mark an otherwise-healthy connection needs_reconnect.
+async def _fetch_journals(nango, conn, tenant, page, since):
+    try:
+        rows = await nango.action_list_journals(conn, tenant_id=tenant, page=page, modified_since=since)
+    except Exception:
+        rows = []
+    if rows or page > 1:
+        return rows
+    try:
+        return await nango.fetch_xero_journals_page(conn, tenant, page)  # proxy fallback (page 1)
+    except Exception:
+        return []  # journals.read scope not granted yet → 0 records
+
+
+async def _fetch_assets(nango, conn, tenant, page, since):
+    try:
+        rows = await nango.action_list_assets(conn, tenant_id=tenant, page=page)
+    except Exception:
+        rows = []
+    if rows or page > 1:
+        return rows
+    try:
+        return await nango.fetch_xero_assets_page(conn, tenant, page)  # proxy fallback (page 1)
+    except Exception:
+        return []  # assets.read scope not granted yet → 0 records
+
+
+# The ten mirrored entities. First five are incremental (actions honour the
+# watermark); the rest are small / watermark-less full refreshes. EVERY entity is
+# action-first with a proxy fallback, so a disabled or failing action (e.g. a
+# Nango plan limit) transparently drops to the proxy and the sync keeps pulling
+# data. journal + asset (SOP) need extra scopes → 0 records until granted.
 ENTITY_SPECS: dict[str, EntitySpec] = {
     "invoice": EntitySpec(
         "invoice", "incremental", "InvoiceID",
@@ -203,6 +234,10 @@ ENTITY_SPECS: dict[str, EntitySpec] = {
         "payment", "full", "PaymentID", _fetch_payments),
     "organisation": EntitySpec(
         "organisation", "full", "OrganisationID", _fetch_org, paginates=False),
+    "journal": EntitySpec(
+        "journal", "full", "JournalID", _fetch_journals),
+    "asset": EntitySpec(
+        "asset", "full", "assetId", _fetch_assets),
 }
 
 

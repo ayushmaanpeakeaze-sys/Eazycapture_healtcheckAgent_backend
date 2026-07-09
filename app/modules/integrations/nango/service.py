@@ -179,6 +179,47 @@ class NangoService:
         payments = body.get("Payments") or []
         return payments if isinstance(payments, list) else []
 
+    async def fetch_xero_journals_page(
+        self,
+        connection_id: str,
+        tenant_id: str,
+        page: int,
+    ) -> list[dict[str, Any]]:
+        """One page of raw Xero Journals — the GL postings (incl. manual journals).
+        Xero paginates journals by JournalNumber offset → offset = (page-1)*100.
+        Proxy fallback for the list-journals action; needs accounting.journals.read."""
+        body = await self._client.proxy_get(
+            connection_id=connection_id,
+            provider_config_key=self._provider_config_key,
+            endpoint="api.xro/2.0/Journals",
+            tenant_id=tenant_id,
+            params={"offset": (page - 1) * 100},
+        )
+        if not isinstance(body, dict):
+            return []
+        journals = body.get("Journals") or []
+        return journals if isinstance(journals, list) else []
+
+    async def fetch_xero_assets_page(
+        self,
+        connection_id: str,
+        tenant_id: str,
+        page: int,
+    ) -> list[dict[str, Any]]:
+        """One page of the Xero fixed-asset register (assets.xro/1.0, REGISTERED).
+        Proxy fallback for the list-assets action; needs the assets.read scope."""
+        body = await self._client.proxy_get(
+            connection_id=connection_id,
+            provider_config_key=self._provider_config_key,
+            endpoint="assets.xro/1.0/Assets",
+            tenant_id=tenant_id,
+            params={"status": "REGISTERED", "page": page, "pageSize": 100},
+        )
+        if not isinstance(body, dict):
+            return []
+        assets = body.get("items") or []
+        return assets if isinstance(assets, list) else []
+
     async def fetch_xero_invoice(
         self,
         connection_id: str,
@@ -393,6 +434,24 @@ class NangoService:
         """``list-organisation`` — the Xero organisation record (single page)."""
         return await self._action_list_full(
             connection_id, "list-organisation", "organisations", tenant_id, page, where, modified_since)
+
+    async def action_list_journals(
+        self, connection_id: str, tenant_id: Optional[str] = None, page: int = 1,
+        where: Optional[str] = None, modified_since: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """``list-journals`` — one page of raw GL journals WITH lines (incl. manual
+        journals). Needs the ``accounting.journals.read`` scope on the connection."""
+        return await self._action_list_full(
+            connection_id, "list-journals", "journals", tenant_id, page, where, modified_since)
+
+    async def action_list_assets(
+        self, connection_id: str, tenant_id: Optional[str] = None, page: int = 1,
+        where: Optional[str] = None, modified_since: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """``list-assets`` — one page of the fixed-asset register (REGISTERED).
+        Needs the ``assets.read`` scope on the connection."""
+        return await self._action_list_full(
+            connection_id, "list-assets", "assets", tenant_id, page, where, modified_since)
 
     async def action_get_trial_balance(
         self,

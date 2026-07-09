@@ -12,6 +12,8 @@ import './xero/actions/list-accounts-full.js';          // chart of accounts (ty
 import './xero/actions/list-tax-rates.js';              // tax rates (sales/purchase tax + drift checks)
 import './xero/actions/list-payments.js';               // payments (IsReconciled + settled invoice)
 import './xero/actions/list-organisation.js';           // organisation (base currency / period)
+import './xero/actions/list-journals.js';               // raw GL journals + lines (incl. manual journals) — SOP
+import './xero/actions/list-assets.js';                 // fixed-asset register (capitalised) — SOP dedup
 import './xero/actions/get-trial-balance.js';           // trial balance report (Balance in Xero)
 import './xero/syncs/invoices-full.js';
 

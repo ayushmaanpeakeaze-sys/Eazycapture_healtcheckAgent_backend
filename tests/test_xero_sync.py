@@ -75,7 +75,8 @@ def test_specs_cover_every_sync_entity():
 
 def test_incremental_vs_full_modes():
     incremental = {"invoice", "bank_transaction", "credit_note", "contact", "account"}
-    full = {"tax_rate", "payment", "organisation"}
+    # journal + asset (SOP) are full-refresh, watermark-less like tax_rate/payment/org.
+    full = {"tax_rate", "payment", "organisation", "journal", "asset"}
     assert {e for e, s in ENTITY_SPECS.items() if s.mode == "incremental"} == incremental
     assert {e for e, s in ENTITY_SPECS.items() if s.mode == "full"} == full
 
@@ -90,6 +91,8 @@ def test_id_fields_match_xero():
         "tax_rate": "TaxType",
         "payment": "PaymentID",
         "organisation": "OrganisationID",
+        "journal": "JournalID",
+        "asset": "assetId",
     }
     assert {e: s.id_field for e, s in ENTITY_SPECS.items()} == expected
 

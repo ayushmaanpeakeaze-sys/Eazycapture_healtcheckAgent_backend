@@ -34,8 +34,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base, uuid_pk
 
-# Mirrored entities: the first five sync incrementally; the last three are
-# watermark-less and full-refresh each sync.
+# Mirrored entities: the first five sync incrementally; the rest are
+# watermark-less and full-refresh each sync. journal + asset (SOP) need extra
+# Xero scopes (accounting.journals.read / assets.read) → 0 records until granted.
 SYNC_ENTITIES: tuple[str, ...] = (
     "invoice",
     "bank_transaction",
@@ -45,6 +46,8 @@ SYNC_ENTITIES: tuple[str, ...] = (
     "tax_rate",
     "payment",
     "organisation",
+    "journal",
+    "asset",
 )
 
 
