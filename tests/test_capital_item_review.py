@@ -1,15 +1,10 @@
-"""Capital Item Review (account-based, pure deterministic) — mirror of
-low_cost_fixed_asset.
+"""Capital Item Review — the Revenue-vs-Capital SOP (pure deterministic).
 
-A line posted to a MONITORED EXPENSE account for an amount ABOVE the threshold
-(capital_item_threshold, default £500) → may really be a capital item (fixed
-asset) mis-coded to an expense. Account + AMOUNT only — no contact, no LLM.
-Monitored = explicit codes when configured, else expense accounts whose NAME
-looks capital-suspicious (repairs / maintenance / printing / stationery).
-
-The content-based sibling (description / supplier keyword detection, the SOP
-engine) is a separate check tested in test_revenue_vs_capital.py; this check
-steps aside when such a content signal is present so the two never double-flag.
+A P&L EXPENSE line above the threshold (capital_item_threshold, default £500)
+flagged when ANY signal fires: it sits on a monitored / capital-suspicious account
+(explicit codes, else names like repairs / printing), OR its description /
+reference / supplier reads like a capital purchase (a keyword or known supplier).
+Obvious revenue spend (repairs / servicing / fuel / insurance …) is excluded.
 """
 from datetime import date
 from decimal import Decimal
@@ -110,13 +105,31 @@ def test_no_coa_types_silent_in_keyword_mode():
     assert _find_capital_items([_tx("1", "473", "90000")], _NAMES, {}) == []
 
 
-def test_content_signal_steps_aside_for_revenue_vs_capital():
-    # A capital keyword in the description belongs to revenue_vs_capital — the
-    # account-based check must step aside even on a monitored account, so the
-    # same line is never double-flagged.
-    tx = BatchTransaction(
-        transaction_id="1", date=date(2026, 1, 1), description="Dell laptop purchase",
-        amount=Decimal("90000"), vendor_name="Dell", type="ACCPAY",
-        contact_id="C1", current_account_code="473",
+def _desc_tx(tid, amt, desc, *, code="400", vendor="Acme"):
+    return BatchTransaction(
+        transaction_id=tid, date=date(2026, 1, 1), description=desc,
+        amount=Decimal(str(amt)), vendor_name=vendor, type="ACCPAY",
+        contact_id="C1", current_account_code=code,
     )
-    assert _find_capital_items([tx], _NAMES, _TYPES) == []
+
+
+def test_keyword_flags_on_plain_account():
+    # SOP: a capital keyword flags even on a plain (non-monitored) expense account.
+    hits = _find_capital_items([_desc_tx("1", 1200, "Dell laptop purchase", vendor="Dell")], _NAMES, _TYPES)
+    assert len(hits) == 1
+    assert hits[0].match_reasons["matched_keyword"] == "laptop"
+
+
+def test_supplier_signal_flags():
+    hits = _find_capital_items([_desc_tx("1", 1500, "Order 4471", vendor="Currys")], _NAMES, _TYPES)
+    assert len(hits) == 1
+    assert hits[0].match_reasons["matched_supplier"] == "currys"
+
+
+def test_revenue_exclusion_beats_signal():
+    # "servicing / repair" is revenue spend — excluded even with a capital keyword.
+    assert _find_capital_items([_desc_tx("1", 900, "Vehicle servicing and repair")], _NAMES, _TYPES) == []
+
+
+def test_no_capital_signal_ignored():
+    assert _find_capital_items([_desc_tx("1", 600, "Monthly subscription fee", vendor="Netflix")], _NAMES, _TYPES) == []

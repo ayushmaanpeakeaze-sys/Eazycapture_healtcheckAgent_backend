@@ -135,10 +135,6 @@ class AuditSettings:
     # fall back to a name-keyword match on expense accounts (repairs / maintenance
     # / printing / stationery).
     capital_monitored_accounts: tuple[str, ...] = ()
-    # Revenue vs Capital review (content-based, SOP): a P&L EXPENSE line ABOVE this
-    # whose description / supplier reads like a capital purchase (laptop, machinery
-    # …) may belong in fixed assets. Independent of the account it sits on.
-    revenue_vs_capital_threshold: Decimal = Decimal("500")
     # --- misallocated items (vague account + material amount) ---
     # --- undocumented bills (no attachment in Xero) -----------------------
     undocumented_min_amount: Decimal = Decimal("0")   # ignore bills under this

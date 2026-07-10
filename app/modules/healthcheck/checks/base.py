@@ -30,7 +30,6 @@ class SettingField:
 # name here when you move a category's settings into app/checks/<name>.py.
 _CATEGORY_MODULES: tuple[str, ...] = (
     "fixed_assets",
-    "revenue_vs_capital",
     "documents",
     "tax",
     "coding",

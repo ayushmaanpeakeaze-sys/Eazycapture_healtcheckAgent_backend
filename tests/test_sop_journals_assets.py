@@ -59,7 +59,7 @@ def test_reshape_skips_empty_journal():
 
 # --- orchestrator: a manual journal reaches ONLY the capital checks -----------
 
-def test_manual_journal_flags_revenue_vs_capital():
+def test_manual_journal_flags_capital_item():
     tx = BatchTransaction(
         transaction_id="J1", date=date(2026, 1, 1), description="Dell laptop purchase",
         amount=Decimal("1200"), vendor_name="Manual journal", type="MANJOURNAL",
@@ -72,9 +72,9 @@ def test_manual_journal_flags_revenue_vs_capital():
     res = asyncio.run(run_batch_health_check(
         BatchHealthCheckRequest(transactions=[tx], context=ctx)))
     types = {f.issue_type for f in res.flagged if f.transaction_id == "J1"}
-    assert "revenue_vs_capital" in types
-    # No leak: a manual journal must reach ONLY the capital checks.
-    assert types <= {"revenue_vs_capital", "capital_item_review"}
+    assert "capital_item_review" in types
+    # No leak: a manual journal must reach ONLY the capital check.
+    assert types <= {"capital_item_review"}
 
 
 # --- asset dedup (Step 7) ----------------------------------------------------
@@ -93,14 +93,14 @@ def _asset(price, d):
 
 
 def test_dedup_drops_already_capitalised():
-    flags = [_flag("T1", "revenue_vs_capital", "1200.00")]
+    flags = [_flag("T1", "capital_item_review", "1200.00")]
     txns = [_tx("T1", "2026-01-10")]
     assets = [_asset(1200.0, "2026-01-05")]     # same value, 5 days apart → strong
     assert _drop_already_capitalised(flags, txns, assets) == []
 
 
 def test_dedup_keeps_when_amount_differs():
-    flags = [_flag("T1", "revenue_vs_capital", "1200.00")]
+    flags = [_flag("T1", "capital_item_review", "1200.00")]
     txns = [_tx("T1", "2026-01-10")]
     assert len(_drop_already_capitalised(flags, txns, [_asset(999.0, "2026-01-05")])) == 1
 
@@ -113,7 +113,7 @@ def test_dedup_keeps_when_date_far():
 
 
 def test_dedup_noop_without_assets():
-    flags = [_flag("T1", "revenue_vs_capital", "1200.00")]
+    flags = [_flag("T1", "capital_item_review", "1200.00")]
     txns = [_tx("T1", "2026-01-10")]
     assert len(_drop_already_capitalised(flags, txns, [])) == 1
 

@@ -797,7 +797,7 @@ def _build_context(
 # =====================================================================
 
 # Capital flags eligible for the SOP fixed-asset dedup (Step 7).
-_CAPITAL_ISSUE_TYPES = {"capital_item_review", "revenue_vs_capital"}
+_CAPITAL_ISSUE_TYPES = {"capital_item_review"}
 
 
 def _as_date(value: Any) -> Optional[date]:

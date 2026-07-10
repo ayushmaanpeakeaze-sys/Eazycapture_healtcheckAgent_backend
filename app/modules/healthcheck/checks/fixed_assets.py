@@ -1,18 +1,12 @@
-"""Fixed Assets check group.
+"""Fixed Assets check group. Pure deterministic (no LLM).
 
-Two account-based checks here, each = account TYPE + line AMOUNT, pure
-deterministic (no LLM):
   * ``low_cost_fixed_asset``  — a line in a FIXED-asset account BELOW the
     capitalisation threshold (probably should be expensed).
-  * ``capital_item_review``   — a P&L EXPENSE line above the threshold posted to a
-    monitored / capital-suspicious account (repairs / printing …), obvious revenue
-    spend excluded — a possible capital item hiding in an expense account.
-
-The content-based sibling ``revenue_vs_capital`` (the SOP keyword / supplier
-engine) lives in its own module; this check steps aside when a content signal is
-present so the two never double-flag a line.
-
-Detection logic + tunable settings + registry metadata all live here.
+  * ``capital_item_review``   — the Revenue-vs-Capital SOP: a P&L EXPENSE line
+    above the threshold that looks like a capital item — flagged when it sits on a
+    monitored / capital-suspicious account, OR its description / supplier reads
+    like a capital purchase (a keyword or known supplier). Obvious revenue spend
+    (repairs / fuel / insurance …) excluded. One check, all signals.
 """
 from __future__ import annotations
 
@@ -103,17 +97,9 @@ def _find_capital_items(
     coa_type_lookup: dict[str, str],
     settings=None,
 ) -> list[FlaggedIssue]:
-    """Capital item review (account-based): a P&L EXPENSE line above the threshold
-    posted to a MONITORED / capital-suspicious expense account (repairs / printing
-    / stationery … or an explicit ``capital_monitored_accounts`` code) — a possible
-    capital item hiding in an expense account.
-
-    Account-driven — it flags on WHERE the line sits. Content signals (a capital
-    keyword or known supplier in the description) belong to the sibling
-    ``revenue_vs_capital`` check, so this one STEPS ASIDE whenever such a signal is
-    present: a line is never flagged by both. Obvious revenue spend (repairs /
-    servicing / fuel / insurance / consumables) is excluded. Review-only.
-    """
+    """Revenue vs Capital review (SOP): a P&L EXPENSE above the threshold, flagged
+    when it sits on a monitored/suspicious account OR its description/supplier reads
+    capital (keyword / known supplier). Revenue spend excluded. Review-only."""
     settings = _settings(settings)
     threshold = settings.capital_item_threshold
     monitored = {c.strip().upper() for c in settings.capital_monitored_accounts if c.strip()}
@@ -124,11 +110,9 @@ def _find_capital_items(
         supplier = (tx.vendor_name or "").strip()
         doc_text = " ".join(p for p in (tx.description, tx.reference, supplier) if p)
         if has_revenue_exclusion(doc_text):
-            continue  # SOP exclusions: repairs / fuel / insurance / consumables
-        # A content signal (keyword/supplier) is revenue_vs_capital's territory —
-        # step aside so the same line is never double-flagged by both checks.
-        if matched_capital_keyword(doc_text) or matched_capital_supplier(supplier):
-            continue
+            continue  # exclusion on doc text only (a Repairs account must not self-exclude)
+        keyword = matched_capital_keyword(doc_text)
+        supplier_hit = matched_capital_supplier(supplier)
         for line_no, code, amount in _account_lines(tx):
             code = (code or "").strip()
             if not code or amount is None:
@@ -140,27 +124,35 @@ def _find_capital_items(
                 continue  # amount threshold — low-value items ignored
             name = coa_lookup.get(code) or code
             if monitored:                       # explicit codes configured → only those
-                if code.upper() not in monitored:
-                    continue
-            elif not any(k in name.lower() for k in _CAPITAL_REVIEW_KEYWORDS):
-                continue                         # else auto-watch capital-suspicious names
+                monitored_hit = code.upper() in monitored
+            else:                               # else auto-watch capital-suspicious names
+                monitored_hit = any(k in name.lower() for k in _CAPITAL_REVIEW_KEYWORDS)
+            if not (monitored_hit or keyword or supplier_hit):
+                continue
+            signals: list[str] = []
+            if keyword:
+                signals.append(f"description mentions '{keyword}'")
+            if supplier_hit:
+                signals.append(f"supplier '{supplier}' commonly sells assets")
+            if monitored_hit:
+                signals.append(f"account {code} ({name}) often hides capital items")
+            why = "; ".join(signals)
             flagged.append(FlaggedIssue(
                 transaction_id=tx.transaction_id,
                 issue_type="capital_item_review",
                 severity="medium",
                 message=(
-                    f"{supplier or 'This'}: {symbol}{amt:.2f} on monitored expense "
-                    f"account {code} ({name}) — above the {symbol}{threshold:.0f} "
-                    f"threshold. Review whether it is a capital item to capitalise."
+                    f"{supplier or 'This'}: {symbol}{amt:.2f} on expense account "
+                    f"{code} ({name}) — {why}. Review whether to capitalise as a "
+                    f"fixed asset instead of expensing."
                 )[:200],
                 current_code=code,
                 reasoning=(
-                    f"{symbol}{amt:.2f} sits on {code} ({name}) — an expense account "
-                    f"watched for capital items — and is above the "
-                    f"{symbol}{threshold:.0f} threshold. A purchase this size on this "
-                    f"account may be a FIXED asset mis-coded to an expense. "
-                    f"Recommended: review and, if it is an asset, re-code it to a "
-                    f"fixed-asset account."
+                    f"{symbol}{amt:.2f} is above the {symbol}{threshold:.0f} capital "
+                    f"threshold and {why}, so this may be a capital item that should "
+                    f"be a FIXED asset (capitalised + depreciated), not expensed in "
+                    f"one go. Recommended: review and, if it is an asset, re-code it "
+                    f"to a fixed-asset account."
                 ),
                 match_reasons={
                     "line_no": line_no,
@@ -170,7 +162,9 @@ def _find_capital_items(
                     "line_amount": f"{amt:.2f}",
                     "threshold": f"{threshold:.2f}",
                     "currency": currency,
-                    "monitored_account": True,
+                    "matched_keyword": keyword,
+                    "matched_supplier": supplier_hit,
+                    "monitored_account": monitored_hit,
                     "recommended_action": "capitalise",
                     "recode_to_account_type": "FIXED",
                 },
@@ -189,10 +183,11 @@ SETTING_FIELDS: tuple[SettingField, ...] = (
                  unit="currency", min=0, step=100),
     SettingField("capital_item_threshold", "Fixed Assets", "capital_item_review",
                  "Flag expense over …", "amount",
-                 "Review any P&L expense above this amount posted to a monitored / "
-                 "capital-suspicious account (repairs, printing …) — it may be a "
-                 "capital item mis-coded to an expense. Obvious revenue spend "
-                 "(repairs, fuel, insurance) is excluded. Default 500.",
+                 "Review any P&L expense above this amount whose account, description "
+                 "or supplier looks like a capital purchase (laptop, machinery, "
+                 "furniture … or a monitored account) — it may belong in fixed "
+                 "assets. Obvious revenue spend (repairs, fuel, insurance) is "
+                 "excluded. Default 500.",
                  unit="currency", min=0, step=100),
     SettingField("capital_monitored_accounts", "Fixed Assets", "capital_item_review",
                  "Monitored expense accounts", "list",
