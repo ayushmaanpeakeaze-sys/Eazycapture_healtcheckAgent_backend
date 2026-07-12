@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import redis.asyncio as async_redis
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +46,27 @@ class _BatchProgress:
 
 
 _batches: dict[str, _BatchProgress] = {}
+
+# Batch Inspector CSV template: required columns first, then the optional ones,
+# with one example row. Served for the "Download template" button.
+_BATCH_TEMPLATE_CSV = (
+    "transaction_id,date,description,vendor_name,amount,type,reference,contact_id,current_account_code,tax_code\n"
+    "INV-001,2026-06-01,Office chairs,Acme Ltd,750.00,ACCPAY,PO-1001,C-ACME,429,INPUT2\n"
+)
+
+
+@router.get(
+    "/health-check/batch/template.csv",
+    summary="Download the Batch Inspector CSV template (header + one example row).",
+)
+async def batch_template_csv() -> Response:
+    """Ready-to-fill CSV — required columns (transaction_id, date, description,
+    vendor_name, amount) plus the optional ones, with one example row."""
+    return Response(
+        content=_BATCH_TEMPLATE_CSV,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="batch_template.csv"'},
+    )
 
 
 @router.post(

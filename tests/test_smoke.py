@@ -15,12 +15,25 @@ def test_openapi_lists_all_v1_routes(client):
         "/api/v1/validate-invoice",
         "/api/v1/health-check/batch",
         "/api/v1/health-check/batch/async",
+        "/api/v1/health-check/batch/template.csv",
         "/api/v1/audit/progress/{batch_id}",
         "/api/v1/enrich-audit",
         "/api/v1/suggest-fix",
     }
     missing = expected - set(paths)
     assert not missing, f"missing routes: {missing}"
+
+
+def test_batch_template_csv_downloads(client):
+    """The Batch Inspector 'Download template' endpoint returns a CSV attachment
+    whose header carries the required columns."""
+    r = client.get("/api/v1/health-check/batch/template.csv")
+    assert r.status_code == 200
+    assert "text/csv" in r.headers["content-type"]
+    assert "attachment" in r.headers["content-disposition"]
+    header = r.text.splitlines()[0]
+    for col in ("transaction_id", "date", "description", "vendor_name", "amount"):
+        assert col in header
 
 
 def test_enrich_audit_disabled_returns_disabled(client):
