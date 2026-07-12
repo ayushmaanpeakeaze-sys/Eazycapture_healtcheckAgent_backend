@@ -109,9 +109,7 @@ def _find_capital_items(
         symbol = "£" if currency == "GBP" else f"{currency} "
         supplier = (tx.vendor_name or "").strip()
         doc_text = " ".join(p for p in (tx.description, tx.reference, supplier) if p)
-        if has_revenue_exclusion(doc_text):
-            continue  # exclusion on doc text only (a Repairs account must not self-exclude)
-        keyword = matched_capital_keyword(doc_text)
+        line_descs = {i + 1: (li.description or "") for i, li in enumerate(tx.line_items)}
         supplier_hit = matched_capital_supplier(supplier)
         for line_no, code, amount in _account_lines(tx):
             code = (code or "").strip()
@@ -122,6 +120,11 @@ def _find_capital_items(
             amt = abs(amount)
             if amt <= threshold:
                 continue  # amount threshold — low-value items ignored
+            # scan the doc text + THIS line's own description (item name usually here)
+            text = f"{doc_text} {line_descs.get(line_no, '')}"
+            if has_revenue_exclusion(text):
+                continue  # revenue spend (repair / servicing / fuel …)
+            keyword = matched_capital_keyword(text)
             name = coa_lookup.get(code) or code
             if monitored:                       # explicit codes configured → only those
                 monitored_hit = code.upper() in monitored
