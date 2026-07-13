@@ -36,6 +36,7 @@ _CATEGORY_MODULES: tuple[str, ...] = (
     "duplicates",
     "bank",
     "dates",
+    "prepayments",
     "approval",
     "contacts",
 )

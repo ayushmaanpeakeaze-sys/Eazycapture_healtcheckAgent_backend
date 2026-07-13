@@ -32,6 +32,7 @@ from app.modules.healthcheck.checks.fixed_assets import (
     _find_capital_items,
     _find_low_cost_fixed_assets,
 )
+from app.modules.healthcheck.checks.prepayments import _find_prepayments
 from app.modules.healthcheck.checks.coding import (
     _find_direction_mismatches,
     _find_misallocated_items,
@@ -202,6 +203,9 @@ async def run_batch_health_check(
     capital_universe = transactions + bank_transactions + manual_journals
     flagged.extend(_find_low_cost_fixed_assets(capital_universe, coa_type_lookup, coa_lookup, settings))
     flagged.extend(_find_capital_items(capital_universe, coa_lookup, coa_type_lookup, settings))
+    # Prepayment review (SOP) — expense periods past year-end; bills + spend money
+    # only (not manual journals, per the SOP's ignore-opening-journals rule).
+    flagged.extend(_find_prepayments(transactions + bank_transactions, coa_lookup, coa_type_lookup, settings))
     # If the LLM anomaly pass didn't run, fall back to the deterministic
     # amount_outlier flags so outliers are still surfaced.
     if (not do_anomaly_llm or anomaly_llm_failed) and run_amount_outlier:

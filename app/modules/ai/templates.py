@@ -134,6 +134,15 @@ _CONTEXT: dict[str, tuple[str, str]] = {
         "depreciation schedule. If it is a genuine repair or consumable, "
         "dismiss the flag.",
     ),
+    "prepayment_review": (
+        "This expense covers a service period that runs past the financial "
+        "year-end, so part of it relates to next year. Expensing it in full "
+        "overstates this year's costs and understates profit; the future "
+        "portion should sit on the balance sheet as a prepayment.",
+        "Confirm the period the expense covers. If part falls after year-end, "
+        "move that portion to prepayments (straight-line by months) so the "
+        "cut-off is correct. If it is fully within the year, dismiss the flag.",
+    ),
     "wrong_category": (
         "A transaction posted to the wrong expense or income account will "
         "misstate your profit and loss reporting. Incorrect categorisation "

@@ -723,6 +723,7 @@ async def _fetch_xero_org_context(
             "tax_rates": tax_rates,
             "base_currency": base_currency,
             "shortcode": shortcode,
+            "financial_year_end": _org_year_end(org),
         }
     except Exception:
         logger.exception(
@@ -730,6 +731,20 @@ async def _fetch_xero_org_context(
             "falling back to hardcoded fixtures"
         )
         return {}
+
+
+def _org_year_end(org: Any) -> dict[str, int]:
+    """Xero org's FinancialYearEndMonth/Day → prepayment_review settings ({} when
+    the org doesn't carry them)."""
+    if not isinstance(org, dict):
+        return {}
+    try:
+        month, day = int(org.get("FinancialYearEndMonth")), int(org.get("FinancialYearEndDay"))
+    except (TypeError, ValueError):
+        return {}
+    if 1 <= month <= 12 and 1 <= day <= 31:
+        return {"financial_year_end_month": month, "financial_year_end_day": day}
+    return {}
 
 
 def _db_org_context(company_id: UUID) -> dict[str, Any]:
@@ -762,6 +777,7 @@ def _db_org_context(company_id: UUID) -> dict[str, Any]:
             "base_currency": base_currency,
             "shortcode": shortcode,
             "assets": assets_raw,
+            "financial_year_end": _org_year_end(org),
         }
     except Exception:
         logger.exception(
@@ -890,7 +906,10 @@ def _call_rules_batch(
     # Per-client tunable thresholds (duplicate window, overdue days, outlier
     # multiple, …). Forwarded verbatim; the rule engine ignores unknown keys
     # and keeps defaults for missing ones.
-    rule_settings = cfg.get("settings") or None
+    # Org's financial year-end (auto-derived from Xero) is the base; any manual
+    # setting overrides it. Feeds the prepayment_review check.
+    _year_end = (org_ctx or {}).get("financial_year_end") or {}
+    rule_settings = {**_year_end, **(cfg.get("settings") or {})} or None
 
     # Run the rules engine in-process (the pure logic in app/services/healthcheck)
     # rather than over an HTTP hop to the web service, which was fragile.

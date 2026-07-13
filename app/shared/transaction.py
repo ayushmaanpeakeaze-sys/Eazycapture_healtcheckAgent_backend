@@ -25,6 +25,7 @@ IssueType = Literal[
 
     "low_cost_fixed_asset",
     "capital_item_review",
+    "prepayment_review",        # SOP — expense period extends past year-end
     "wrong_category",           # displayed as "Miscategorized Items"
     "misallocated_item",        # deterministic — vague account + material amount
     "undocumented_bill",        # deterministic — supplier bill with no attachment

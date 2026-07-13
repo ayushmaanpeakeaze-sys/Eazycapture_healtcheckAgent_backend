@@ -135,6 +135,13 @@ class AuditSettings:
     # fall back to a name-keyword match on expense accounts (repairs / maintenance
     # / printing / stationery).
     capital_monitored_accounts: tuple[str, ...] = ()
+    # --- prepayment review (SOP) ---
+    # Only review P&L expenses above this for a period extending past year-end.
+    prepayment_min_amount: Decimal = Decimal("250")
+    # Financial year-end (month/day). Auto-populated from the Xero org when synced;
+    # these are the fallback default (31 Dec) and the manual-override target.
+    financial_year_end_month: int = 12
+    financial_year_end_day: int = 31
     # --- misallocated items (vague account + material amount) ---
     # --- undocumented bills (no attachment in Xero) -----------------------
     undocumented_min_amount: Decimal = Decimal("0")   # ignore bills under this

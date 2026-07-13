@@ -20,6 +20,7 @@ from app.modules.healthcheck.checks.dates import META as _DATES_META
 from app.modules.healthcheck.checks.documents import META as _DOCUMENTS_META
 from app.modules.healthcheck.checks.duplicates import META as _DUPLICATES_META
 from app.modules.healthcheck.checks.fixed_assets import META as _FIXED_ASSETS_META
+from app.modules.healthcheck.checks.prepayments import META as _PREPAYMENTS_META
 from app.modules.healthcheck.checks.tax import META as _TAX_META
 
 # group → list of (key, label, built)
@@ -28,7 +29,7 @@ _GROUPS: dict[str, list[tuple[str, str, bool]]] = {
     "Duplicates": list(_DUPLICATES_META),
     "Tax & VAT": list(_TAX_META),
     "Categorisation & Coding": list(_CODING_META),
-    "Date & Ageing": list(_DATES_META),
+    "Date & Ageing": list(_DATES_META) + list(_PREPAYMENTS_META),
     "Approval & Status": list(_APPROVAL_META),
     "Contacts": list(_CONTACTS_META),
     "Document Integrity": list(_DOCUMENTS_META),

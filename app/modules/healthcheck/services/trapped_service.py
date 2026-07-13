@@ -40,6 +40,7 @@ _ISSUE_TITLES: dict[str, str] = {
     "bill_or_direct_booking":        "{vendor} may have direct bookings instead of bills",
     "low_cost_fixed_asset":          "{vendor} has low-cost fixed asset expenses",
     "capital_item_review":           "{vendor} has potential capital items in expenses",
+    "prepayment_review":             "{vendor} has expenses that may need a prepayment",
     "wrong_category":                "{vendor} has miscategorised transactions",
     "multi_account_supplier":        "{vendor} uses multiple accounts inconsistently",
     "multi_tax_code_supplier":       "{vendor} uses multiple tax codes",
