@@ -97,14 +97,9 @@ def _find_prepayments(
     ye_month, ye_day = int(settings.financial_year_end_month), int(settings.financial_year_end_day)
     flagged: list[FlaggedIssue] = []
     for tx in transactions:
-        text = " ".join(p for p in (tx.description, tx.reference) if p)
-        period = _extract_period(text, tx.date)
-        if period is None:
-            continue
-        p_start, p_end = period
+        doc_text = " ".join(p for p in (tx.description, tx.reference) if p)
+        line_descs = {i + 1: (li.description or "") for i, li in enumerate(tx.line_items)}
         year_end = _year_end_for(tx.date, ye_month, ye_day)
-        if p_end <= year_end:
-            continue  # whole period within the year — no prepayment
         currency = (tx.currency_code or "GBP").strip().upper()
         symbol = "£" if currency == "GBP" else f"{currency} "
         for line_no, code, amount in _account_lines(tx):
@@ -116,6 +111,14 @@ def _find_prepayments(
             amt = abs(amount)
             if amt <= threshold:
                 continue
+            # scan the doc text + THIS line's own description — the service period is
+            # usually written on the line item, not the document.
+            period = _extract_period(f"{doc_text} {line_descs.get(line_no, '')}".strip(), tx.date)
+            if period is None:
+                continue
+            p_start, p_end = period
+            if p_end <= year_end:
+                continue  # whole period within the year — no prepayment
             name = coa_lookup.get(code) or code
             months_after = _months_after(year_end, p_end)
             if months_after < 1:

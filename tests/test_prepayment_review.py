@@ -9,7 +9,7 @@ guidance only — review-only, never auto-posts.
 from datetime import date
 from decimal import Decimal
 
-from app.shared.transaction import BatchTransaction
+from app.shared.transaction import BatchLineItem, BatchTransaction
 from app.modules.healthcheck.engine.audit_settings import AuditSettings
 from app.modules.healthcheck.checks.prepayments import _find_prepayments
 
@@ -106,3 +106,20 @@ def test_threshold_setting_respected():
     s = AuditSettings.from_config({"prepayment_min_amount": "2000"})
     assert len(_find_prepayments([_tx("1", date(2025, 7, 1), "Annual subscription", 2500)], _NAMES, _TYPES, s)) == 1
     assert _find_prepayments([_tx("1", date(2025, 7, 1), "Annual subscription", 1500)], _NAMES, _TYPES, s) == []
+
+
+def test_period_on_line_description_flags():
+    # Xero writes the description on the LINE ITEM, not the document — a period
+    # there must still be caught (was doc-description-only before).
+    tx = BatchTransaction(
+        transaction_id="L1", date=date(2025, 7, 15), description="bill",
+        amount=Decimal("1200"), vendor_name="Aviva", type="ACCPAY", contact_id="C1",
+        line_items=[BatchLineItem(
+            account_code="429", amount=Decimal("1200"),
+            description="Annual software subscription")],
+    )
+    hits = _find_prepayments([tx], _NAMES, _TYPES)
+    assert len(hits) == 1
+    assert hits[0].match_reasons["line_no"] == 1
+    assert hits[0].match_reasons["months_after_year_end"] == 6
+    assert hits[0].match_reasons["prepaid_estimate"] == "600.00"
