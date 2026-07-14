@@ -12,7 +12,11 @@ from __future__ import annotations
 
 from app.modules.healthcheck.checks.base import SettingField
 from app.shared.transaction import BatchTransaction, FlaggedIssue
-from app.modules.healthcheck.engine.shared import _account_lines, _EXPENSE_ACCOUNT_TYPES
+from app.modules.healthcheck.engine.shared import (
+    _account_lines,
+    _CREDIT_DOC_TYPES,
+    _EXPENSE_ACCOUNT_TYPES,
+)
 from app.modules.healthcheck.checks.capital_keywords import (
     has_revenue_exclusion,
     matched_capital_keyword,
@@ -45,6 +49,8 @@ def _find_low_cost_fixed_assets(
     threshold = settings.low_cost_asset_max
     flagged: list[FlaggedIssue] = []
     for tx in transactions:
+        if (tx.type or "").strip().upper() in _CREDIT_DOC_TYPES:
+            continue  # a credit note reverses a purchase — not an asset to reclassify
         currency = (tx.currency_code or "GBP").strip().upper()
         symbol = "£" if currency == "GBP" else f"{currency} "
         for line_no, code, amount in _account_lines(tx):
@@ -105,6 +111,8 @@ def _find_capital_items(
     monitored = {c.strip().upper() for c in settings.capital_monitored_accounts if c.strip()}
     flagged: list[FlaggedIssue] = []
     for tx in transactions:
+        if (tx.type or "").strip().upper() in _CREDIT_DOC_TYPES:
+            continue  # a credit note reverses a purchase — not a capital acquisition
         currency = (tx.currency_code or "GBP").strip().upper()
         symbol = "£" if currency == "GBP" else f"{currency} "
         supplier = (tx.vendor_name or "").strip()

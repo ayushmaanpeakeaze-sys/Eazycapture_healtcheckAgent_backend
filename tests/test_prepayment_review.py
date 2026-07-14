@@ -123,3 +123,16 @@ def test_period_on_line_description_flags():
     assert hits[0].match_reasons["line_no"] == 1
     assert hits[0].match_reasons["months_after_year_end"] == 6
     assert hits[0].match_reasons["prepaid_estimate"] == "600.00"
+
+
+def test_credit_note_not_flagged_as_prepayment():
+    # A credit note is a reversal, not a prepayment — must be skipped.
+    def _cn(typ):
+        return BatchTransaction(
+            transaction_id="CN", date=date(2025, 7, 15), description="Annual subscription",
+            amount=Decimal("1200"), vendor_name="Vendor", type=typ,
+            contact_id="C1", current_account_code="429",
+        )
+    assert len(_find_prepayments([_cn("ACCPAY")], _NAMES, _TYPES)) == 1
+    assert _find_prepayments([_cn("ACCPAYCREDIT")], _NAMES, _TYPES) == []
+    assert _find_prepayments([_cn("ACCRECCREDIT")], _NAMES, _TYPES) == []

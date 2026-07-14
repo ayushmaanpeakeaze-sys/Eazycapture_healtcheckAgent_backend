@@ -133,3 +133,16 @@ def test_revenue_exclusion_beats_signal():
 
 def test_no_capital_signal_ignored():
     assert _find_capital_items([_desc_tx("1", 600, "Monthly subscription fee", vendor="Netflix")], _NAMES, _TYPES) == []
+
+
+def test_credit_note_not_flagged_as_capital():
+    # A credit note reverses a purchase — it must NOT be flagged for capitalising.
+    def _cn(typ):
+        return BatchTransaction(
+            transaction_id="CN", date=date(2026, 1, 1), description="Laptop",
+            amount=Decimal("90000"), vendor_name="Acme", type=typ,
+            contact_id="C1", current_account_code="473",
+        )
+    assert len(_find_capital_items([_cn("ACCPAY")], _NAMES, _TYPES)) == 1      # bill flags
+    assert _find_capital_items([_cn("ACCPAYCREDIT")], _NAMES, _TYPES) == []    # credit note skipped
+    assert _find_capital_items([_cn("ACCRECCREDIT")], _NAMES, _TYPES) == []

@@ -19,7 +19,11 @@ from dateutil.relativedelta import relativedelta
 
 from app.modules.healthcheck.checks.base import SettingField
 from app.shared.transaction import BatchTransaction, FlaggedIssue
-from app.modules.healthcheck.engine.shared import _account_lines, _EXPENSE_ACCOUNT_TYPES
+from app.modules.healthcheck.engine.shared import (
+    _account_lines,
+    _CREDIT_DOC_TYPES,
+    _EXPENSE_ACCOUNT_TYPES,
+)
 
 _MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
 _DATE_RE = re.compile(
@@ -97,6 +101,8 @@ def _find_prepayments(
     ye_month, ye_day = int(settings.financial_year_end_month), int(settings.financial_year_end_day)
     flagged: list[FlaggedIssue] = []
     for tx in transactions:
+        if (tx.type or "").strip().upper() in _CREDIT_DOC_TYPES:
+            continue  # a credit note reverses a purchase — not a prepayment
         doc_text = " ".join(p for p in (tx.description, tx.reference) if p)
         line_descs = {i + 1: (li.description or "") for i, li in enumerate(tx.line_items)}
         year_end = _year_end_for(tx.date, ye_month, ye_day)
