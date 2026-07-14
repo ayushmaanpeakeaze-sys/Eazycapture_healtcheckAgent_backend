@@ -91,6 +91,18 @@ def sync_company_task(
             "[Sync] task done company=%s status=%s records=%s",
             company_id, result.get("status"), result.get("total_records"),
         )
+        # A sync alone leaves the audit stale: newly-synced Xero data (e.g. a bill
+        # just added) isn't checked until an audit runs. Chain one so "Refresh
+        # Data" and the nightly sync always re-flag against the latest data.
+        if result.get("status") == "ok":
+            try:
+                from app.modules.healthcheck.tasks import _dispatch_audit_sync
+                _dispatch_audit_sync(company_id)
+                logger.info("[Sync] chained audit dispatch for company=%s", company_id)
+            except Exception:
+                logger.exception(
+                    "[Sync] audit dispatch after sync failed for company=%s", company_id,
+                )
         return result
     finally:
         # Clear the in-progress flag so /sync-status reports syncing=false once
