@@ -127,13 +127,42 @@ class ResolveService:
                 ),
             )
 
+        # Recode only the flagged line(s): the lines currently on a flagged
+        # account (current_code) — not every line on the document.
+        target_codes = frozenset(
+            str(f.get("current_code")).strip()
+            for f in (row.result or {}).get("flagged", [])
+            if isinstance(f, dict) and f.get("current_code")
+        )
         xero_response = await self._call_xero(
             company_id=company_id,
             document_id=row.document_id,
             document_type=row.document_type,
             header_updates=clean_header,
             line_item_updates=clean_lines,
+            target_codes=target_codes,
         )
+        # A genuine Xero write failure (or an unsupported bank-txn recode) must NOT
+        # mark the row resolved — that would be a false success while Xero is
+        # unchanged. A demo stub (no live connection) has xero_unreachable=False and
+        # still resolves, so demos keep working.
+        if xero_response.get("xero_unreachable"):
+            return ResolveResponse(
+                row_id=row.id,
+                document_id=row.document_id,
+                resolved=False,
+                applied_updates={},
+                skipped_fields=skipped,
+                xero_url=xero_url,
+                xero_response=xero_response,
+                ai_applied=ai_applied,
+                ai_fix_strategy=ai_fix_strategy,
+                error_code="XERO_UPDATE_FAILED",
+                error_detail=(
+                    xero_response.get("reason")
+                    or "Xero couldn't be updated — try again, or edit it in Xero."
+                ),
+            )
 
         notes = resolution_notes or _default_notes(
             ai_applied=ai_applied,
@@ -507,6 +536,7 @@ class ResolveService:
         document_type: str,
         header_updates: dict[str, str],
         line_item_updates: dict[str, str],
+        target_codes: frozenset[str] = frozenset(),
     ) -> dict[str, Any]:
         """Push updates to Xero via Nango, or log a stub if disabled.
 
@@ -532,6 +562,19 @@ class ResolveService:
                 reason="Nango disabled or company missing connection.",
             )
 
+        # Bank transactions (SPEND/RECEIVE) live at /BankTransactions, not
+        # /Invoices — a line recode through the invoice endpoint silently no-ops,
+        # so surface it as a failed write instead of a false "resolved".
+        if line_item_updates and document_type.strip().upper() in {"SPEND", "RECEIVE"}:
+            return self._stub_response(
+                document_id=document_id,
+                document_type=document_type,
+                header_updates=header_updates,
+                line_item_updates=line_item_updates,
+                reason="Line recode not supported for a bank transaction — edit in Xero.",
+                xero_unreachable=True,
+            )
+
         body = await self._build_xero_body(
             integration=integration,
             connection_id=connection_id,
@@ -539,6 +582,7 @@ class ResolveService:
             document_id=document_id,
             header_updates=header_updates,
             line_item_updates=line_item_updates,
+            target_codes=target_codes,
         )
         if body is None:
             logger.warning(
@@ -606,10 +650,14 @@ class ResolveService:
         document_id: UUID,
         header_updates: dict[str, str],
         line_item_updates: dict[str, str],
+        target_codes: frozenset[str] = frozenset(),
     ) -> Optional[dict[str, Any]]:
         """For line-item updates we need a read-modify-write: fetch the
-        invoice, preserve each line's required fields, overlay our
-        changes. Header-only updates skip the fetch."""
+        invoice, preserve each line's required fields, overlay our changes ONLY
+        on the flagged line(s) — those currently on a ``target_codes`` account —
+        so a multi-line bill's other lines are left untouched. Empty target_codes
+        falls back to every line (safe for single-line docs). Header-only updates
+        skip the fetch."""
         if not line_item_updates:
             return {
                 "Invoices": [{
@@ -643,7 +691,9 @@ class ResolveService:
             ):
                 if line.get(preserved) is not None:
                     new_line[preserved] = line[preserved]
-            new_line.update(line_item_updates)
+            line_code = str(line.get("AccountCode") or "").strip()
+            if not target_codes or line_code in target_codes:
+                new_line.update(line_item_updates)
             merged_lines.append(new_line)
 
         if not merged_lines:

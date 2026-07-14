@@ -188,23 +188,26 @@ class IntegrationService:
         field_updates: Optional[dict[str, Any]] = None,
         line_item_updates: Optional[dict[str, Any]] = None,
     ) -> Optional[dict[str, Any]]:
-        """Write a field-level fix back to the accounting org.
+        """Write a field/line-item fix back to the accounting org.
 
-        Tries the Nango ``update-invoice`` Action first (simpler, no
-        tenant-id header needed). Falls back to the proxy for complex
-        line-item bodies or when the action is not enabled.
+        Actions-first: header fields and line recodes both go through the
+        Nango ``update-invoice`` Action. The proxy is only a fallback for
+        when the action isn't enabled.
         """
-        # Action path: simple field or line-item updates
-        if field_updates or line_item_updates:
-            action_input: dict[str, Any] = {"invoiceId": invoice_id}
-            if field_updates:
-                action_input.update(field_updates)
-            if line_item_updates:
-                action_input["lineItems"] = [line_item_updates]
+        # Action-first. For a line RECODE, send the fully rebuilt LineItems from
+        # `body` (LineItemID + unchanged lines + only the flagged line changed) —
+        # the action does a Xero POST which REPLACES all lines, so a bare
+        # {AccountCode} would drop LineItemID and wipe the other lines.
+        action_fields: dict[str, Any] = dict(field_updates or {})
+        if line_item_updates:
+            body_lines = (body.get("Invoices") or [{}])[0].get("LineItems")
+            if body_lines:
+                action_fields["lineItems"] = body_lines
+        if action_fields:
             result = await self._nango.action_update_invoice(
                 connection_id=connection_id,
                 invoice_id=invoice_id,
-                fields={k: v for k, v in action_input.items() if k != "invoiceId"},
+                fields=action_fields,
                 tenant_id=tenant_id,
             )
             if result is not None:
@@ -217,7 +220,7 @@ class IntegrationService:
                 "falling back to proxy for invoice %s", invoice_id,
             )
 
-        # Proxy path: full Xero body (handles complex line-item updates)
+        # Proxy fallback: full Xero body.
         return await self._nango.update_xero_invoice(
             connection_id, tenant_id, invoice_id, body,
         )
