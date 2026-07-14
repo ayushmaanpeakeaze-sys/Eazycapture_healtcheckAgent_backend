@@ -248,8 +248,8 @@ async def run_batch_health_check(
         flagged.extend(_find_sales_tax_missing(tax_universe, coa_lookup, coa_type_lookup, settings))
     # Wrong-direction VAT (sales code on a bill / purchase code on an invoice).
     # Include bank items so the "Show Bank payments too" toggle can reveal them.
-    flagged.extend(_find_sales_tax_on_bills(transactions + bank_transactions, tax_dir))
-    flagged.extend(_find_purchase_tax_on_invoices(transactions + bank_transactions, tax_dir))
+    flagged.extend(_find_sales_tax_on_bills(transactions + bank_transactions, tax_dir, coa_type_lookup))
+    flagged.extend(_find_purchase_tax_on_invoices(transactions + bank_transactions, tax_dir, coa_type_lookup))
 
     # Drop any flag whose rule the client disabled on the Audit Configuration
     # screen; also covers the deterministic rules in one place.

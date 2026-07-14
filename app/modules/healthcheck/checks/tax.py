@@ -171,50 +171,70 @@ def _find_sales_tax_missing(
 def _find_sales_tax_on_bills(
     transactions: list[BatchTransaction],
     tax_dir: Optional[dict[str, tuple]] = None,
+    coa_type_lookup: Optional[dict[str, str]] = None,
 ) -> list[FlaggedIssue]:
     """A purchase document (bill OR Money Out) using a SALES-side VAT code."""
+    coa_type_lookup = coa_type_lookup or {}
     flagged: list[FlaggedIssue] = []
     for tx in transactions:
         if (tx.type or "").strip().upper() not in (_PURCHASE_DOC_TYPES | _MONEY_OUT_TYPES):
             continue
+        line_accts = {i + 1: (li.account_code or "") for i, li in enumerate(tx.line_items)}
         for line_no, code, net, tax_amt in _tax_lines_with_amounts(tx):
             clean = (code or "").strip().upper()
-            if clean and _is_wrong_for_bill(clean, tax_dir):
-                where = f" (line {line_no})" if line_no else ""
-                flagged.append(FlaggedIssue(
-                    transaction_id=tx.transaction_id,
-                    issue_type="sales_tax_on_bills",
-                    severity="high",
-                    message=f"{tx.vendor_name} bill uses sales tax code {clean}{where}."[:140],
-                    current_code=clean,
-                    match_reasons=_tax_direction_reasons(clean, net, tax_amt),
-                ))
-                break
+            if not (clean and _is_wrong_for_bill(clean, tax_dir)):
+                continue
+            # Output tax is only wrong on a genuine purchase line. A Money-Out coded
+            # to a revenue account is a customer refund — output tax is correct there.
+            acct = (line_accts.get(line_no) or tx.current_account_code or "").strip()
+            if (coa_type_lookup.get(acct) or "").strip().upper() in _REVENUE_ACCOUNT_TYPES:
+                continue
+            where = f" (line {line_no})" if line_no else ""
+            flagged.append(FlaggedIssue(
+                transaction_id=tx.transaction_id,
+                issue_type="sales_tax_on_bills",
+                severity="high",
+                message=f"{tx.vendor_name} bill uses sales tax code {clean}{where}."[:140],
+                current_code=clean,
+                match_reasons=_tax_direction_reasons(clean, net, tax_amt),
+            ))
+            break
     return flagged
 
 
 def _find_purchase_tax_on_invoices(
     transactions: list[BatchTransaction],
     tax_dir: Optional[dict[str, tuple]] = None,
+    coa_type_lookup: Optional[dict[str, str]] = None,
 ) -> list[FlaggedIssue]:
     """A sales document (invoice OR Money In) using a PURCHASE-side VAT code."""
+    coa_type_lookup = coa_type_lookup or {}
     flagged: list[FlaggedIssue] = []
     for tx in transactions:
         if (tx.type or "").strip().upper() not in (_SALES_DOC_TYPES | _MONEY_IN_TYPES):
             continue
+        line_accts = {i + 1: (li.account_code or "") for i, li in enumerate(tx.line_items)}
         for line_no, code, net, tax_amt in _tax_lines_with_amounts(tx):
             clean = (code or "").strip().upper()
-            if clean and _is_wrong_for_invoice(clean, tax_dir):
-                where = f" (line {line_no})" if line_no else ""
-                flagged.append(FlaggedIssue(
-                    transaction_id=tx.transaction_id,
-                    issue_type="purchase_tax_on_invoices",
-                    severity="high",
-                    message=f"{tx.vendor_name} invoice uses purchase tax code {clean}{where}."[:140],
-                    current_code=clean,
-                    match_reasons=_tax_direction_reasons(clean, net, tax_amt),
-                ))
-                break
+            if not (clean and _is_wrong_for_invoice(clean, tax_dir)):
+                continue
+            # Input tax is only wrong on a genuine income line. A Money-In coded to
+            # an expense/asset account is a refund/reversal — the input code is
+            # correct there — so only flag when the line sits on a revenue account.
+            acct = (line_accts.get(line_no) or tx.current_account_code or "").strip()
+            acct_type = (coa_type_lookup.get(acct) or "").strip().upper()
+            if acct_type and acct_type not in _REVENUE_ACCOUNT_TYPES:
+                continue
+            where = f" (line {line_no})" if line_no else ""
+            flagged.append(FlaggedIssue(
+                transaction_id=tx.transaction_id,
+                issue_type="purchase_tax_on_invoices",
+                severity="high",
+                message=f"{tx.vendor_name} invoice uses purchase tax code {clean}{where}."[:140],
+                current_code=clean,
+                match_reasons=_tax_direction_reasons(clean, net, tax_amt),
+            ))
+            break
     return flagged
 
 

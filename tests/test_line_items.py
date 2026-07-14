@@ -126,3 +126,44 @@ def test_keyword_fallback_when_no_tax_context():
     hits = _find_sales_tax_on_bills([tx], {})   # empty map → keyword path
     assert len(hits) == 1
     assert hits[0].issue_type == "sales_tax_on_bills"
+
+
+# --- tax direction judged by ACCOUNT, not doc type (refunds/reversals) ------
+
+_COA_TYPE = {"200": "REVENUE", "412": "OVERHEADS", "420": "OVERHEADS"}
+
+
+def _money_in(acct, tax_code="INPUT2"):
+    return BatchTransaction(
+        transaction_id="RCV-1", date=date(2026, 1, 1), description="refund",
+        amount=Decimal("500"), vendor_name="Kafea terra UK", type="RECEIVE",
+        current_account_code=acct,
+        line_items=[BatchLineItem(account_code=acct, tax_code=tax_code, amount=Decimal("500"))],
+    )
+
+
+def test_money_in_refund_on_expense_not_flagged():
+    # Money-In on an EXPENSE account with input tax = supplier refund/reversal —
+    # input tax is correct there → must NOT be flagged (was a false positive).
+    tx = _money_in("412", "INPUT2")
+    assert _find_purchase_tax_on_invoices([tx], _tax_direction_map(_CTX), _COA_TYPE) == []
+
+
+def test_money_in_input_tax_on_revenue_still_flagged():
+    # A genuine income line (revenue account) with input tax IS wrong → flagged.
+    tx = _money_in("200", "INPUT2")
+    hits = _find_purchase_tax_on_invoices([tx], _tax_direction_map(_CTX), _COA_TYPE)
+    assert len(hits) == 1
+    assert hits[0].issue_type == "purchase_tax_on_invoices"
+
+
+def test_money_out_refund_on_revenue_not_flagged():
+    # Money-Out on a REVENUE account with output tax = customer refund — output
+    # tax is correct → must NOT be flagged as sales-tax-on-a-bill.
+    tx = BatchTransaction(
+        transaction_id="SPD-1", date=date(2026, 1, 1), description="refund",
+        amount=Decimal("500"), vendor_name="Acme", type="SPEND",
+        current_account_code="200",
+        line_items=[BatchLineItem(account_code="200", tax_code="OUTPUT2", amount=Decimal("500"))],
+    )
+    assert _find_sales_tax_on_bills([tx], _tax_direction_map(_CTX), _COA_TYPE) == []
