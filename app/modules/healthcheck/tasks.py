@@ -185,7 +185,11 @@ def _reshape_xero_to_batch(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
     # InvoiceNumber; for purchase docs fall back to InvoiceNumber when blank.
     reference_value = _str_or_none(raw.get("Reference"))
     if doc_type in ("ACCPAY", "ACCPAYCREDIT") and not reference_value:
-        reference_value = _str_or_none(raw.get("InvoiceNumber"))
+        # Credit notes carry CreditNoteNumber, not InvoiceNumber — fall back to it
+        # so a purchase credit's identifier isn't blank (duplicate matching keys on it).
+        reference_value = _str_or_none(
+            raw.get("InvoiceNumber") or raw.get("CreditNoteNumber")
+        )
 
     return {
         "transaction_id": invoice_id,
@@ -200,7 +204,11 @@ def _reshape_xero_to_batch(raw: dict[str, Any]) -> Optional[dict[str, Any]]:
         "reference": reference_value,
         "tax_code": _str_or_none(first_line.get("TaxType")),
         "current_account_code": _str_or_none(first_line.get("AccountCode")),
-        "invoice_number": _str_or_none(raw.get("InvoiceNumber")),
+        # Credit notes use CreditNoteNumber (no InvoiceNumber) — map it here so the
+        # duplicate check's primary "same identifying number" signal works for them.
+        "invoice_number": _str_or_none(
+            raw.get("InvoiceNumber") or raw.get("CreditNoteNumber")
+        ),
         "due_date": _xero_date(raw.get("DueDate")),
         "status": status or None,
         "amount_paid": _str_or_none(raw.get("AmountPaid")),

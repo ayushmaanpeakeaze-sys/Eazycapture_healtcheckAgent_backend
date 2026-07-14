@@ -14,6 +14,7 @@ from app.modules.healthcheck.checks.duplicates import _find_duplicate_documents
 from app.modules.healthcheck.engine.deterministic import (
     _build_contact_alias,
 )
+from app.modules.healthcheck.tasks import _reshape_xero_to_batch
 
 
 def _doc(tid, contact_id, ref, amount="100", d=date(2026, 1, 1),
@@ -596,3 +597,39 @@ def test_distinct_documents_hint_on_different_numbers():
     # SAME invoice number → no hint regardless of date.
     hits2 = _find_duplicate_documents([_inv("A", "INV-9"), _inv("B", "INV-9", date(2026, 1, 3))], None, w)
     assert hits2 and hits2[0].match_reasons["distinct_documents_possible"] is False
+
+
+# --- Credit notes: CreditNoteNumber must map to the duplicate identifier -----
+
+def _reshape_cn(cid, number, total="27000", typ="ACCPAYCREDIT"):
+    raw = {
+        "CreditNoteID": cid, "Type": typ, "Status": "AUTHORISED",
+        "Total": total, "Date": "2026-07-14", "CreditNoteNumber": number,
+        "Reference": "", "Contact": {"Name": "Acme", "ContactID": "c1"},
+        "CurrencyCode": "GBP", "LineItems": [],
+    }
+    return BatchTransaction(**_reshape_xero_to_batch(raw))
+
+
+def test_credit_note_number_maps_to_identifier():
+    # Xero credit notes carry CreditNoteNumber (no InvoiceNumber) — it must land
+    # on invoice_number + reference so the duplicate check can key on it.
+    tx = _reshape_cn("cn1", "xyz")
+    assert tx.invoice_number == "xyz"
+    assert tx.reference == "xyz"
+
+
+def test_duplicate_credit_notes_detected_high_confidence():
+    # Two purchase credit notes, same CreditNoteNumber + amount + day = a
+    # confirmed (1.0) duplicate. Was invisible before (number unmapped → 0.75).
+    hits = _find_duplicate_documents([_reshape_cn("cn1", "xyz"), _reshape_cn("cn2", "xyz")])
+    assert len(hits) >= 1
+    assert hits[0].issue_type == "duplicate_credit_note"
+    assert hits[0].match_reasons["confidence"] == 1.0
+
+
+def test_different_credit_note_numbers_not_confirmed_duplicate():
+    # Same amount but DIFFERENT CreditNoteNumbers → not a confirmed 1.0 duplicate
+    # (the number now distinguishes them, instead of both being blank).
+    hits = _find_duplicate_documents([_reshape_cn("cn1", "xyz"), _reshape_cn("cn2", "abc")])
+    assert all(h.match_reasons.get("confidence", 0) < 1.0 for h in hits)
