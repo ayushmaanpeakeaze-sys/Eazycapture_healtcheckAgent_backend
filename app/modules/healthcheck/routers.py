@@ -1479,16 +1479,25 @@ async def health_stats(
     )
     open_document_issues = open_issues - open_contact_issues
 
+    # DOCUMENT-level counts: a per-check badge should match that check's document
+    # list, so each issue type (and severity) is counted ONCE per row — a bill with
+    # two capital lines is one "Capital item review" document, not two.
     type_counter: Counter = Counter()
     sev_counter: Counter = Counter()
     type_severity: dict = {}
     for r in open_rows:
+        row_types: set = set()
+        row_sevs: set = set()
         for f in (r.result or {}).get("flagged") or []:
             itype = f.get("issue_type", "unknown")
             sev = f.get("severity", "medium")
-            type_counter[itype] += 1
-            sev_counter[sev] += 1
+            row_types.add(itype)
+            row_sevs.add(sev)
             type_severity[itype] = sev
+        for itype in row_types:
+            type_counter[itype] += 1
+        for sev in row_sevs:
+            sev_counter[sev] += 1
 
     # Denominators = BROADEST recent completed audit (MAX), so a period-scoped
     # run (April = 22 docs) doesn't shrink them below a prior full sweep.
