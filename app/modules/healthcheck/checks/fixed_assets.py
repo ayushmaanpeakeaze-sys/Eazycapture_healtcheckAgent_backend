@@ -15,8 +15,13 @@ from app.shared.transaction import BatchTransaction, FlaggedIssue
 from app.modules.healthcheck.engine.shared import (
     _account_lines,
     _CREDIT_DOC_TYPES,
-    _EXPENSE_ACCOUNT_TYPES,
+    _PURE_EXPENSE_ACCOUNT_TYPES,
 )
+
+# SOP: capital review reads the purchase side of the P&L only — Payable Invoices,
+# Spend Money and manual journals. Receivable invoices, Receive Money and credit
+# notes (a reversal) are out of scope.
+_CAPITAL_DOC_TYPES = frozenset({"ACCPAY", "SPEND", "MANJOURNAL"})
 from app.modules.healthcheck.checks.capital_keywords import (
     has_revenue_exclusion,
     matched_capital_keyword,
@@ -111,8 +116,8 @@ def _find_capital_items(
     monitored = {c.strip().upper() for c in settings.capital_monitored_accounts if c.strip()}
     flagged: list[FlaggedIssue] = []
     for tx in transactions:
-        if (tx.type or "").strip().upper() in _CREDIT_DOC_TYPES:
-            continue  # a credit note reverses a purchase — not a capital acquisition
+        if (tx.type or "").strip().upper() not in _CAPITAL_DOC_TYPES:
+            continue  # SOP: bills / Spend Money / journals only
         currency = (tx.currency_code or "GBP").strip().upper()
         symbol = "£" if currency == "GBP" else f"{currency} "
         supplier = (tx.vendor_name or "").strip()
@@ -123,8 +128,8 @@ def _find_capital_items(
             code = (code or "").strip()
             if not code or amount is None:
                 continue
-            if (coa_type_lookup.get(code) or "").strip().upper() not in _EXPENSE_ACCOUNT_TYPES:
-                continue  # P&L expense accounts only
+            if (coa_type_lookup.get(code) or "").strip().upper() not in _PURE_EXPENSE_ACCOUNT_TYPES:
+                continue  # SOP: P&L expense only — balance-sheet postings are ignored
             amt = abs(amount)
             if amt <= threshold:
                 continue  # amount threshold — low-value items ignored
@@ -167,6 +172,10 @@ def _find_capital_items(
                 ),
                 match_reasons={
                     "line_no": line_no,
+                    # SOP output report: date, supplier + description identify the item.
+                    "transaction_date": tx.date.isoformat(),
+                    "supplier": supplier or None,
+                    "description": (line_descs.get(line_no) or tx.description or "").strip()[:200],
                     "account_code": code,
                     "account_name": name,
                     "current_account_type": "EXPENSE",

@@ -146,3 +146,40 @@ def test_credit_note_not_flagged_as_capital():
     assert len(_find_capital_items([_cn("ACCPAY")], _NAMES, _TYPES)) == 1      # bill flags
     assert _find_capital_items([_cn("ACCPAYCREDIT")], _NAMES, _TYPES) == []    # credit note skipped
     assert _find_capital_items([_cn("ACCRECCREDIT")], _NAMES, _TYPES) == []
+
+
+def test_only_purchase_side_documents_reviewed():
+    # SOP: "Ignore Receivable Invoices / Receive Money". Capital review reads the
+    # purchase side only — bills, Spend Money and journals.
+    def _doc(typ):
+        return BatchTransaction(
+            transaction_id="D", date=date(2026, 1, 1), description="Dell laptop purchase",
+            amount=Decimal("1200"), vendor_name="Dell", type=typ, contact_id="C1",
+            current_account_code="473",
+        )
+    for typ in ("ACCPAY", "SPEND", "MANJOURNAL"):
+        assert len(_find_capital_items([_doc(typ)], _NAMES, _TYPES)) == 1, typ
+    for typ in ("ACCREC", "RECEIVE", "ACCPAYCREDIT", "ACCRECCREDIT"):
+        assert _find_capital_items([_doc(typ)], _NAMES, _TYPES) == [], typ
+
+
+def test_balance_sheet_postings_ignored():
+    # SOP: "Ignore balance sheet postings" — P&L expense accounts only.
+    for typ in ("PREPAYMENT", "INVENTORY", "LIABILITY", "ASSET", "CURRENT",
+                "CURRENTASSET", "FIXED", "FIXEDASSET", "DEPRECIATN"):
+        assert _find_capital_items(
+            [_tx("1", "473", "1200")], _NAMES, {"473": typ},
+        ) == [], f"{typ} is not a P&L expense and must be ignored"
+    for typ in ("EXPENSE", "OVERHEADS", "DIRECTCOSTS"):
+        assert len(_find_capital_items(
+            [_tx("1", "473", "1200")], _NAMES, {"473": typ},
+        )) == 1, typ
+
+
+def test_sop_output_fields_present():
+    # SOP output report: date, supplier, description on every flagged item.
+    hits = _find_capital_items([_tx("1", "473", "1200")], _NAMES, _TYPES)
+    mr = hits[0].match_reasons
+    assert mr["transaction_date"] == "2026-01-01"
+    assert mr["supplier"] == "Acme"
+    assert mr["description"]
