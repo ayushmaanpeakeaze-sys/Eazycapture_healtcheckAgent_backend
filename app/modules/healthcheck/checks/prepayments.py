@@ -22,7 +22,7 @@ from app.shared.transaction import BatchTransaction, FlaggedIssue
 from app.modules.healthcheck.engine.shared import (
     _account_lines,
     _CREDIT_DOC_TYPES,
-    _EXPENSE_ACCOUNT_TYPES,
+    _PURE_EXPENSE_ACCOUNT_TYPES,
 )
 
 _MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
@@ -80,11 +80,38 @@ def _year_end_for(tx_date: date, month: int, day: int) -> date:
     return ye if ye >= tx_date else mk(tx_date.year + 1)
 
 
+def _is_month_end(d: date) -> bool:
+    return d.day == monthrange(d.year, d.month)[1]
+
+
 def _months_after(year_end: date, period_end: date) -> int:
+    """Whole months of the period that fall after the year-end. Two month-ends are
+    a whole month apart even when the day numbers differ (31 Dec → 30 Jun = 6)."""
     m = (period_end.year - year_end.year) * 12 + (period_end.month - year_end.month)
-    if period_end.day < year_end.day:
+    if period_end.day < year_end.day and not (_is_month_end(year_end) and _is_month_end(period_end)):
         m -= 1
     return max(m, 0)
+
+
+def _release_schedule(
+    year_end: date, months_after: int, monthly: Decimal, prepaid: Decimal,
+) -> list[dict]:
+    """Month-by-month release of the prepaid portion, starting the month after
+    year-end — the table a bookkeeper works from. Guidance only; nothing posts."""
+    rows: list[dict] = []
+    cursor = year_end
+    for i in range(months_after):
+        cursor = _end_of_month(cursor + relativedelta(months=1))
+        remaining = (
+            Decimal("0.00") if i == months_after - 1
+            else (prepaid - monthly * (i + 1)).quantize(Decimal("0.01"))
+        )
+        rows.append({
+            "month": f"{cursor:%b %Y}",
+            "release": str(monthly),
+            "remaining": str(max(remaining, Decimal("0.00"))),
+        })
+    return rows
 
 
 def _find_prepayments(
@@ -112,8 +139,8 @@ def _find_prepayments(
             code = (code or "").strip()
             if not code or amount is None:
                 continue
-            if (coa_type_lookup.get(code) or "").strip().upper() not in _EXPENSE_ACCOUNT_TYPES:
-                continue  # P&L expense accounts only
+            if (coa_type_lookup.get(code) or "").strip().upper() not in _PURE_EXPENSE_ACCOUNT_TYPES:
+                continue  # SOP: P&L expense only — balance-sheet postings are ignored
             amt = abs(amount)
             if amt <= threshold:
                 continue
@@ -131,6 +158,8 @@ def _find_prepayments(
                 continue  # spills past year-end by less than a month — immaterial
             total_months = max(round((p_end - p_start).days / 30.44), 1)
             prepaid = (Decimal(months_after) / Decimal(total_months) * amt).quantize(Decimal("0.01"))
+            monthly = (amt / Decimal(total_months)).quantize(Decimal("0.01"))
+            this_year = (amt - prepaid).quantize(Decimal("0.01"))
             flagged.append(FlaggedIssue(
                 transaction_id=tx.transaction_id,
                 issue_type="prepayment_review",
@@ -152,6 +181,9 @@ def _find_prepayments(
                 ),
                 match_reasons={
                     "line_no": line_no,
+                    # SOP output report: date + description identify the item.
+                    "transaction_date": tx.date.isoformat(),
+                    "description": (line_descs.get(line_no) or tx.description or "").strip()[:200],
                     "account_code": code,
                     "account_name": name,
                     "current_account_type": "EXPENSE",
@@ -163,6 +195,10 @@ def _find_prepayments(
                     "months_after_year_end": months_after,
                     "total_months": total_months,
                     "prepaid_estimate": str(prepaid),
+                    # The split + month-by-month release the bookkeeper works from.
+                    "expense_this_year": str(this_year),
+                    "monthly_amount": str(monthly),
+                    "release_schedule": _release_schedule(year_end, months_after, monthly, prepaid),
                     "recommended_action": "prepay_future_portion",
                 },
             ))

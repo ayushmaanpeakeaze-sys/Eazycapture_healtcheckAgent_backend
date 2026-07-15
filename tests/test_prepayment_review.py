@@ -136,3 +136,38 @@ def test_credit_note_not_flagged_as_prepayment():
     assert len(_find_prepayments([_cn("ACCPAY")], _NAMES, _TYPES)) == 1
     assert _find_prepayments([_cn("ACCPAYCREDIT")], _NAMES, _TYPES) == []
     assert _find_prepayments([_cn("ACCRECCREDIT")], _NAMES, _TYPES) == []
+
+
+def test_bifurcation_and_release_schedule():
+    # SOP Ex1 + the table: split (this year vs prepaid) + month-by-month release.
+    hits = _find_prepayments(
+        [_tx("1", date(2025, 4, 1), "Microsoft subscription 01 Apr 2025 - 31 Mar 2026", 1200)],
+        _NAMES, _TYPES)
+    mr = hits[0].match_reasons
+    assert mr["prepaid_estimate"] == "300.00"
+    assert mr["expense_this_year"] == "900.00"       # 1200 - 300
+    assert mr["monthly_amount"] == "100.00"
+    sched = mr["release_schedule"]
+    assert [r["month"] for r in sched] == ["Jan 2026", "Feb 2026", "Mar 2026"]
+    assert all(r["release"] == "100.00" for r in sched)
+    assert sched[-1]["remaining"] == "0.00"
+    # SOP output report also wants the date + description on each flagged item.
+    assert mr["transaction_date"] == "2025-04-01"
+    assert "Microsoft subscription" in mr["description"]
+
+
+def test_balance_sheet_postings_ignored():
+    # SOP "Ignore: balance sheet postings" — P&L expense accounts only.
+    for typ in ("PREPAYMENT", "CURRENT", "CURRENTASSET", "INVENTORY", "ASSET", "LIABILITY", "FIXED"):
+        assert _find_prepayments(
+            [_tx("1", date(2025, 7, 15), "Annual subscription", 1200)],
+            _NAMES, {"429": typ},
+        ) == [], f"{typ} is a balance-sheet posting and must be ignored"
+
+
+def test_month_end_period_not_undercounted():
+    # 31 Dec year-end, period to 30 Jun → Jan..Jun = 6 months (day 30 < 31 used to
+    # shave one off, under-stating the prepaid portion).
+    hits = _find_prepayments(
+        [_tx("1", date(2025, 7, 1), "Cover 01 Jul 2025 - 30 Jun 2026", 1200)], _NAMES, _TYPES)
+    assert hits[0].match_reasons["months_after_year_end"] == 6
