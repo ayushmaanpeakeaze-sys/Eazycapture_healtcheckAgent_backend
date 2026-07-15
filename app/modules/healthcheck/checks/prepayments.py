@@ -39,8 +39,10 @@ _PERIOD_KEYWORDS = (
     "twelve month", "1 year", "one year", "subscription", "licence", "license",
     "insurance", "renewal",
 )
+# Plural tolerated ("12 months", "subscriptions") — the boundary still stops a
+# keyword firing inside an unrelated word.
 _KEYWORD_RE = re.compile(
-    r"\b(" + "|".join(re.escape(k) for k in _PERIOD_KEYWORDS) + r")\b", re.IGNORECASE)
+    r"\b(" + "|".join(re.escape(k) for k in _PERIOD_KEYWORDS) + r")s?\b", re.IGNORECASE)
 
 
 def _settings(settings):

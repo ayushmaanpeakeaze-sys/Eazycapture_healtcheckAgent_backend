@@ -171,3 +171,10 @@ def test_month_end_period_not_undercounted():
     hits = _find_prepayments(
         [_tx("1", date(2025, 7, 1), "Cover 01 Jul 2025 - 30 Jun 2026", 1200)], _NAMES, _TYPES)
     assert hits[0].match_reasons["months_after_year_end"] == 6
+
+
+def test_plural_period_keywords_match():
+    # SOP lists "12 months" — the singular-only keyword used to miss the plural.
+    for text in ("12 months support plan", "annual subscriptions", "licences renewal"):
+        assert len(_find_prepayments(
+            [_tx("1", date(2025, 7, 15), text, 1200)], _NAMES, _TYPES)) == 1, text

@@ -183,3 +183,18 @@ def test_sop_output_fields_present():
     assert mr["transaction_date"] == "2026-01-01"
     assert mr["supplier"] == "Acme"
     assert mr["description"]
+
+
+def test_plural_keywords_match_but_not_lookalike_words():
+    # SOP: "keyword match can be partial, not exact" — a real "3 laptops" line must
+    # flag. But the word boundary must still stop "car" firing inside "cardboard".
+    def _desc(text):
+        return BatchTransaction(
+            transaction_id="P", date=date(2026, 1, 1), description=text,
+            amount=Decimal("1200"), vendor_name="Neutral Ltd", type="ACCPAY",
+            contact_id="C1", current_account_code="400",
+        )
+    for text in ("3 laptops purchased", "office computers", "company vehicles", "new printers"):
+        assert len(_find_capital_items([_desc(text)], _NAMES, _TYPES)) == 1, text
+    for text in ("cardboard boxes", "carpet cleaning", "carton packing"):
+        assert _find_capital_items([_desc(text)], _NAMES, _TYPES) == [], text

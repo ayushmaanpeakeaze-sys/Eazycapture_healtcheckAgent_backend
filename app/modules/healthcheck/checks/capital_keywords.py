@@ -156,8 +156,12 @@ _CAPITAL_SUPPLIERS: tuple[str, ...] = (
 
 
 def _compile(words: tuple[str, ...]) -> re.Pattern[str]:
+    """Whole-word / phrase match, plural tolerated ("laptops" hits "laptop"). The
+    word boundary is what stops "car" firing inside "cardboard"; the optional "s"
+    is what keeps a real "3 laptops" line from being missed."""
     ordered = sorted(set(words), key=len, reverse=True)  # longest phrase wins
-    return re.compile(r"\b(" + "|".join(re.escape(w) for w in ordered) + r")\b", re.IGNORECASE)
+    return re.compile(
+        r"\b(" + "|".join(re.escape(w) for w in ordered) + r")s?\b", re.IGNORECASE)
 
 
 _CAPITAL_RE = _compile(_CAPITAL_KEYWORDS)
