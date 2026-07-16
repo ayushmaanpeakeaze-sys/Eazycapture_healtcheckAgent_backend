@@ -104,3 +104,27 @@ def test_collect_only_prepayment_account_lines():
     assert len(items) == 1
     assert items[0]["account_code"] == "620"
     assert items[0]["supplier"] == "Aviva"
+
+
+def test_ledger_balance_override_and_source():
+    # When the real Xero balance is supplied it drives the reconciliation.
+    items = [{"date": date(2026, 7, 15), "supplier": "Aviva", "account_code": "620",
+              "description": "Annual insurance", "amount": "12000"}]
+    s = build_prepayment_schedule(items, date(2027, 3, 31), months=12, ledger_balance="9000")
+    assert s["validation"]["ledger_balance"] == "9000.000"
+    assert s["validation"]["ledger_source"] == "xero_trial_balance"
+    # Without it, the ledger side is the posted amount.
+    s2 = build_prepayment_schedule(items, date(2027, 3, 31), months=12)
+    assert s2["validation"]["ledger_source"] == "posted_amounts"
+
+
+def test_prepayment_balance_from_trial_balance():
+    from decimal import Decimal
+    from app.modules.healthcheck.checks.prepayment_schedule import prepayment_balance_from_trial_balance
+    parsed = {
+        "acc-1": {"code": "620", "balance": Decimal("290.075")},
+        "acc-2": {"code": "400", "balance": Decimal("5000")},   # not a prepayment acct
+        "acc-3": {"code": "621", "balance": Decimal("100")},
+    }
+    assert prepayment_balance_from_trial_balance(parsed, {"620", "621"}) == Decimal("390.075")
+    assert prepayment_balance_from_trial_balance(parsed, {"620"}) == Decimal("290.075")

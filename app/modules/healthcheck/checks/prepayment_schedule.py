@@ -59,6 +59,19 @@ def collect_prepayment_items(
     return items
 
 
+def prepayment_balance_from_trial_balance(
+    parsed_tb: dict, account_codes: set[str],
+) -> Decimal:
+    """Sum the balances of the Prepayments account(s) from a parsed Xero Trial
+    Balance (``{account_id: {"code", "balance"}}``) — the real ledger figure the
+    schedule reconciles against."""
+    total = Decimal("0")
+    for row in (parsed_tb or {}).values():
+        if str((row or {}).get("code") or "").strip() in account_codes:
+            total += Decimal(str(row.get("balance") or 0))
+    return total
+
+
 def _xero_date(raw) -> date | None:
     """Xero '/Date(ms+0000)/' or ISO → date."""
     if not raw:
@@ -94,13 +107,16 @@ def build_prepayment_schedule(
     items: list[dict],
     year_end: date,
     months: int = 12,
+    ledger_balance: str | Decimal | None = None,
 ) -> dict:
     """Build the amortisation grid for a list of prepaid items.
 
     Each ``item``: ``{date, invoice_no, supplier, description, account_code,
-    account_name, amount, ledger_amount?}``. ``amount`` is the prepaid cost;
-    ``ledger_amount`` (optional) is what currently sits in the account for that
-    line — defaults to ``amount`` when the release journals aren't synced.
+    account_name, amount, ledger_amount?}``. ``amount`` is the prepaid cost.
+
+    ``ledger_balance`` is the ACTUAL Prepayments-account balance read from Xero
+    (the Trial Balance action). Pass it to reconcile the schedule against the real
+    ledger; omit it and the ledger side falls back to the sum of posted amounts.
 
     Returns the columns, one row per line (monthly cells + carry-forward
     balance), the per-column + balance totals, and the schedule-vs-ledger check.
@@ -111,11 +127,11 @@ def build_prepayment_schedule(
     rows: list[dict] = []
     col_totals = [Decimal("0") for _ in cols]
     schedule_balance = Decimal("0")
-    ledger_balance = Decimal("0")
+    ledger_balance_sum = Decimal("0")
 
     for it in items:
         amount = Decimal(str(it["amount"]))
-        ledger_balance += Decimal(str(it.get("ledger_amount", it["amount"])))
+        ledger_balance_sum += Decimal(str(it.get("ledger_amount", it["amount"])))
         tx_date = it["date"]
         period = _extract_period(str(it.get("description") or ""), tx_date)
 
@@ -160,8 +176,11 @@ def build_prepayment_schedule(
         })
 
     schedule_balance = schedule_balance.quantize(_Q, ROUND_HALF_UP)
-    ledger_balance = ledger_balance.quantize(_Q, ROUND_HALF_UP)
-    difference = (ledger_balance - schedule_balance).quantize(_Q, ROUND_HALF_UP)
+    # Real Xero account balance when provided (from the Trial Balance action),
+    # else the sum of posted amounts.
+    ledger = (Decimal(str(ledger_balance)) if ledger_balance is not None
+              else ledger_balance_sum).quantize(_Q, ROUND_HALF_UP)
+    difference = (ledger - schedule_balance).quantize(_Q, ROUND_HALF_UP)
 
     return {
         "year_end": year_end.isoformat(),
@@ -171,7 +190,8 @@ def build_prepayment_schedule(
         "total_balance": str(schedule_balance),
         "validation": {
             "schedule_balance": str(schedule_balance),
-            "ledger_balance": str(ledger_balance),
+            "ledger_balance": str(ledger),
+            "ledger_source": "xero_trial_balance" if ledger_balance is not None else "posted_amounts",
             "difference": str(difference),
             # A few units of rounding is fine; a material gap means a release
             # was missed or something is mis-posted in the account.
