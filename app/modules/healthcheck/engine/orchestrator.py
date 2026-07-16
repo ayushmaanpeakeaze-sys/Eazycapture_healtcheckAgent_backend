@@ -209,7 +209,7 @@ async def run_batch_health_check(
     flagged.extend(_find_prepayments(transactions + bank_transactions, coa_lookup, coa_type_lookup, settings))
     # Unusual payments (Pattern SOP, deterministic): blank/generic descriptions +
     # large one-off suppliers, over bills + Spend Money.
-    flagged.extend(find_unusual_payments(transactions + bank_transactions))
+    flagged.extend(find_unusual_payments(transactions + bank_transactions, coa_type_lookup))
     # If the LLM anomaly pass didn't run, fall back to the deterministic
     # amount_outlier flags so outliers are still surfaced.
     if (not do_anomaly_llm or anomaly_llm_failed) and run_amount_outlier:

@@ -9,9 +9,8 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from decimal import Decimal
-from statistics import median
 
-from app.modules.healthcheck.engine.shared import _account_lines
+from app.modules.healthcheck.engine.shared import _account_lines, _PURE_EXPENSE_ACCOUNT_TYPES
 from app.shared.transaction import FlaggedIssue
 
 _PAYMENT_DOC_TYPES = {"ACCPAY", "SPEND"}
@@ -26,42 +25,49 @@ def _contact_key(tx) -> str:
     return (getattr(tx, "contact_id", None) or getattr(tx, "vendor_name", "") or "").strip().lower()
 
 
-def _is_unclear(text: str) -> bool:
-    clean = " ".join((text or "").split()).strip().lower()
-    return not clean or clean in _GENERIC_DESC
-
-
 def _doc_text(tx) -> str:
     parts = [tx.description, tx.reference]
     parts += [li.description for li in (tx.line_items or [])]
     return " ".join(p for p in parts if p)
 
 
+def _is_unclear(tx) -> bool:
+    # SOP Rule 1: flag if the DESCRIPTION is generic (regardless of a reference), OR
+    # nothing across description/reference/lines describes the payment at all.
+    desc = " ".join((tx.description or "").split()).strip().lower()
+    combined = " ".join(_doc_text(tx).split()).strip()
+    return (not combined) or (desc in _GENERIC_DESC)
+
+
 def find_unusual_payments(
     transactions,
+    coa_type: dict | None = None,
     large_amount: Decimal | str = "1000",
     one_off_max_count: int = 2,
-    account_min_txns: int = 4,
+    account_min_txns: int = 3,
     account_multiple: Decimal | str = "3",
 ) -> list[FlaggedIssue]:
+    coa_type = coa_type or {}
     large = Decimal(str(large_amount))
     acc_mult = Decimal(str(account_multiple))
     payments = [tx for tx in transactions
                 if (tx.type or "").strip().upper() in _PAYMENT_DOC_TYPES]
     freq = Counter(_contact_key(tx) for tx in payments)
 
+    # SOP Rule 3: the "usual" level per EXPENSE account = its average payment.
     by_account: dict[str, list[Decimal]] = defaultdict(list)
     for tx in payments:
         for _line_no, code, amount in _account_lines(tx):
             code = (code or "").strip()
-            if code and amount is not None:
+            if (code and amount is not None
+                    and (coa_type.get(code) or "").strip().upper() in _PURE_EXPENSE_ACCOUNT_TYPES):
                 by_account[code].append(abs(amount))
-    account_median: dict[str, Decimal] = {}
+    account_avg: dict[str, Decimal] = {}
     for code, amounts in by_account.items():
         if len(amounts) >= account_min_txns:
-            med = Decimal(str(median(amounts)))
-            if med > 0:
-                account_median[code] = med
+            avg = sum(amounts) / Decimal(len(amounts))
+            if avg > 0:
+                account_avg[code] = avg
 
     findings: list[FlaggedIssue] = []
     flagged_tx: set[str] = set()
@@ -69,12 +75,12 @@ def find_unusual_payments(
         amt = abs(tx.amount or Decimal("0"))
         supplier = (tx.vendor_name or "").strip()
         seen_n = freq[_contact_key(tx)]
-        if _is_unclear(_doc_text(tx)):
-            if seen_n <= one_off_max_count:
+        if _is_unclear(tx):
+            if seen_n == 1:
                 findings.append(_finding(
                     tx, "unidentified_supplier", "medium", amt,
                     f"{supplier or 'Payment'}: {_symbol(tx)}{amt:.2f} to a one-off supplier "
-                    f"(seen {seen_n}x) with no clear description — confirm the nature."))
+                    f"(seen once) with no clear description — confirm the nature."))
             else:
                 findings.append(_finding(
                     tx, "unclear_description", "medium", amt,
@@ -94,17 +100,17 @@ def find_unusual_payments(
         supplier = (tx.vendor_name or "").strip()
         for _line_no, code, amount in _account_lines(tx):
             code = (code or "").strip()
-            med = account_median.get(code)
-            if med is None or amount is None:
+            avg = account_avg.get(code)
+            if avg is None or amount is None:
                 continue
             line_amt = abs(amount)
-            if line_amt >= large and line_amt >= med * acc_mult:
-                ratio = line_amt / med
+            if line_amt >= avg * acc_mult:
+                ratio = line_amt / avg
                 findings.append(_finding(
                     tx, "large_vs_account", "medium", line_amt,
                     f"{supplier or 'Payment'}: {_symbol(tx)}{line_amt:.2f} to {code} is "
-                    f"{ratio:.1f}x the usual {_symbol(tx)}{med:.2f} for that account — verify.",
-                    extra={"account": code, "usual": f"{med:.2f}", "ratio": f"{ratio:.1f}"}))
+                    f"{ratio:.1f}x the average {_symbol(tx)}{avg:.2f} for that account — verify.",
+                    extra={"account": code, "usual": f"{avg:.2f}", "ratio": f"{ratio:.1f}"}))
                 flagged_tx.add(tx.transaction_id)
                 break
     return findings
@@ -121,6 +127,8 @@ def _finding(tx, reason: str, severity: str, amt: Decimal, msg: str,
         "supplier": (tx.vendor_name or "").strip(),
         "date": tx.date.isoformat(),
         "amount": f"{amt:.2f}",
+        "account": (tx.current_account_code or "").strip(),
+        "description": (tx.description or "").strip()[:200],
     }
     if extra:
         reasons.update(extra)

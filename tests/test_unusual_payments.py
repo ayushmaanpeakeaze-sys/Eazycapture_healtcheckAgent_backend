@@ -6,11 +6,11 @@ from app.shared.transaction import BatchTransaction
 from app.modules.healthcheck.checks.unusual_payments import find_unusual_payments
 
 
-def _tx(tid, desc, amt, contact, vendor="V", typ="SPEND", code="400", lines=None):
+def _tx(tid, desc, amt, contact, vendor="V", typ="SPEND", code="400", lines=None, ref=None):
     return BatchTransaction(
         transaction_id=tid, date=date(2026, 1, 1), description=desc, amount=Decimal(str(amt)),
         vendor_name=vendor, type=typ, contact_id=contact, current_account_code=code,
-        line_items=lines or [])
+        reference=ref, line_items=lines or [])
 
 
 def test_recurring_supplier_unclear_description_flagged():
@@ -56,14 +56,51 @@ def test_only_payments_scanned():
     assert find_unusual_payments([_tx("S", "payment", 5000, "c1", typ="ACCREC")]) == []
 
 
+def test_generic_description_with_reference_still_flagged():
+    # A generic description ("online") must flag even when a reference number exists.
+    f = find_unusual_payments([_tx("A", "online", 500, "c1", vendor="Utility", ref="TXN-99")])
+    assert len(f) == 1
+    assert f[0].match_reasons["reason"] in ("unclear_description", "unidentified_supplier")
+
+
+def test_flag_carries_raw_description():
+    f = find_unusual_payments([_tx("A", "Consulting services", 40000, "c9", vendor="Rare Ltd")],
+                              large_amount="1000")
+    assert f[0].match_reasons["description"] == "Consulting services"
+
+
 def test_large_vs_account_outlier_flagged():
     small = [_tx(f"S{i}", "Stationery", 100, f"c{i}", vendor=f"Shop {i}", code="500")
              for i in range(4)]
     big = [_tx("B0", "Stationery order", 100, "big", vendor="Big Co", code="500"),
            _tx("B1", "Stationery order", 100, "big", vendor="Big Co", code="500"),
            _tx("B2", "Stationery bulk", 5000, "big", vendor="Big Co", code="500")]
-    f = find_unusual_payments(small + big, large_amount="1000")
+    f = find_unusual_payments(small + big, {"500": "EXPENSE"}, large_amount="1000")
     outliers = [r for r in f if r.match_reasons["reason"] == "large_vs_account"]
     assert len(outliers) == 1
     assert outliers[0].transaction_id == "B2"
     assert outliers[0].match_reasons["account"] == "500"
+
+
+def test_sub_threshold_account_outlier_flagged():
+    # SOP R3: significantly higher than the account's average flags even below £1,000.
+    base = [_tx(f"T{i}", "Taxi", 50, f"c{i}", vendor=f"Cab {i}", code="493") for i in range(4)]
+    big = _tx("BIG", "Taxi to airport", 300, "cbig", vendor="Cab X", code="493")
+    f = find_unusual_payments(base + [big], {"493": "EXPENSE"}, large_amount="1000")
+    outliers = [r for r in f if r.match_reasons["reason"] == "large_vs_account"]
+    assert len(outliers) == 1 and outliers[0].transaction_id == "BIG"
+
+
+def test_outlier_only_on_expense_accounts():
+    # No COA type → not an expense account → no baseline → no large_vs_account flag.
+    txs = [_tx(f"S{i}", "Stationery", 50, f"c{i}", vendor=f"Shop {i}", code="500") for i in range(4)]
+    txs.append(_tx("B", "Stationery", 300, "big", vendor="Big Co", code="500"))
+    f = find_unusual_payments(txs)
+    assert [r for r in f if r.match_reasons["reason"] == "large_vs_account"] == []
+
+
+def test_supplier_seen_twice_unclear_is_not_unidentified():
+    # SOP R8 is "appears ONCE" — a supplier seen twice with a generic desc is R1, not R8.
+    txs = [_tx("A", "payment", 500, "c1", vendor="Dup"), _tx("B", "payment", 500, "c1", vendor="Dup")]
+    f = find_unusual_payments(txs)
+    assert {r.match_reasons["reason"] for r in f} == {"unclear_description"}
