@@ -24,7 +24,9 @@ def find_missing_accruals(
     year_end,
     months: int = 12,
     min_months_present: int = 8,
+    coa_id: dict[str, str] | None = None,
 ) -> list[dict]:
+    coa_id = coa_id or {}
     cols = _fy_month_ends(year_end, months)
     idx = {(c.year, c.month): i for i, c in enumerate(cols)}
     post = _end_of_month(year_end + relativedelta(months=1))
@@ -70,6 +72,7 @@ def find_missing_accruals(
                        f"review whether an accrual is required.")
             findings.append({
                 "issue_type": ISSUE_TYPE,
+                "account_id": coa_id.get(code),
                 "account_code": code,
                 "account_name": name,
                 "missing_month": f"{cols[i]:%b %Y}",
@@ -84,5 +87,4 @@ def find_missing_accruals(
 
 
 SETTING_FIELDS: tuple = ()
-# built=False until the account-level persistence is wired (detection is ready).
-META: tuple[tuple[str, str, bool], ...] = (("missing_accrual", "Accruals", False),)
+META: tuple[tuple[str, str, bool], ...] = (("missing_accrual", "Accruals", True),)

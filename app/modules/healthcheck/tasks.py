@@ -755,6 +755,15 @@ def _org_year_end(org: Any) -> dict[str, int]:
     return {}
 
 
+def _accrual_year_end(fy: dict[str, int], today: date) -> date:
+    """Most recent COMPLETED financial year-end (the year being closed)."""
+    from calendar import monthrange
+    m = int(fy.get("financial_year_end_month") or 12)
+    d = int(fy.get("financial_year_end_day") or 31)
+    ye = date(today.year, m, min(d, monthrange(today.year, m)[1]))
+    return ye if ye <= today else date(today.year - 1, m, min(d, monthrange(today.year - 1, m)[1]))
+
+
 def _db_org_context(company_id: UUID) -> dict[str, Any]:
     """DB-backed twin of ``_fetch_xero_org_context``: read the synced COA, tax
     rates and organisation from our tables and map them with the SAME functions
@@ -1318,6 +1327,8 @@ def historical_audit_task(
 
         # Fetch invoices for every scope (full + duplicates-only).
         transactions, source = _fetch_audit_transactions(db, company)
+        # Accruals need the whole year, so keep the pre-period-filter set.
+        full_transactions = list(transactions)
 
         # Period filter — keep only transactions in [date_from, date_to]
         # (inclusive). Driven by the frontend's Period selector.
@@ -1601,6 +1612,94 @@ def historical_audit_task(
                     "[SuHe][Audit] batch=%s persisted %d contact issues",
                     batch_id, new_contact_issues,
                 )
+
+        # --- 6a2. missing accruals (account-level, whole financial year) --
+        if not dup_only and "missing_accrual" not in set(audit_config.get("disabled_rules") or []):
+            from app.modules.healthcheck.checks.missing_accrual import find_missing_accruals
+            from app.shared.transaction import BatchTransaction
+            with SyncSessionLocal() as s:
+                accounts_raw = db_read.read_raw(s, company_uuid, "account")
+            coa_id, coa_nm, coa_ty = {}, {}, {}
+            for a in accounts_raw:
+                c = str(a.get("Code") or "").strip()
+                if c:
+                    coa_id[c] = (a.get("AccountID") or "").strip() or None
+                    coa_nm[c], coa_ty[c] = a.get("Name") or c, a.get("Type") or ""
+            acc_txs = []
+            for t in full_transactions:
+                try:
+                    acc_txs.append(BatchTransaction(**t))
+                except Exception:  # noqa: BLE001 — skip a malformed row
+                    pass
+            ye = _accrual_year_end((org_ctx or {}).get("financial_year_end") or {}, date.today())
+            accrual_flags = find_missing_accruals(acc_txs, coa_nm, coa_ty, ye, coa_id=coa_id)
+
+            flagged_acc_uuids: set[UUID] = set()
+            with SyncSessionLocal() as db:
+                by_account: dict[str, list] = defaultdict(list)
+                for flag in accrual_flags:
+                    aid = (flag.get("account_id") or "").strip()
+                    if aid:
+                        by_account[aid].append(flag)
+                for aid_str, aflags in by_account.items():
+                    try:
+                        acc_uuid = UUID(aid_str)
+                    except (TypeError, ValueError):
+                        continue
+                    flagged_acc_uuids.add(acc_uuid)
+                    existing_row = db.execute(
+                        select(HealthCheckResult).where(
+                            HealthCheckResult.document_id == acc_uuid,
+                            HealthCheckResult.company_id == company_uuid,
+                            HealthCheckResult.kind == KIND_POST_LEDGER,
+                            HealthCheckResult.status == STATUS_BLOCKED,
+                        ).limit(1)
+                    ).scalar_one_or_none()
+                    if existing_row is not None:
+                        er = dict(existing_row.result or {})
+                        if er.get("resolved") or er.get("dismissed") or er.get("marked_ok"):
+                            continue
+                    items = []
+                    for f in aflags:
+                        item = {k: v for k, v in f.items() if k != "account_id"}
+                        item["transaction_id"] = aid_str
+                        items.append(item)
+                    messages = " | ".join(f.get("message", "") for f in aflags if f.get("message"))
+                    payload = {
+                        "flagged": items,
+                        "rule_ids": ["missing_accrual"],
+                        "messages": messages,
+                        "target_ledger": DEFAULT_TARGET_LEDGER,
+                        "audit_batch_id": batch_id,
+                        "vendor_name": aflags[0].get("account_name", ""),
+                    }
+                    if existing_row is not None:
+                        existing_row.result = payload
+                        existing_row.error_msgs = messages[:1000]
+                        existing_row.ran_at = datetime.now(timezone.utc)
+                    else:
+                        db.add(HealthCheckResult(
+                            company_id=company_uuid, document_id=acc_uuid,
+                            document_type="ACCOUNT", kind=KIND_POST_LEDGER,
+                            status=STATUS_BLOCKED, error_msgs=messages[:1000], result=payload,
+                        ))
+                db.commit()
+
+            # Auto-clear accrual rows for accounts no longer flagged this run.
+            with SyncSessionLocal() as db:
+                prior_acc = db.scalars(
+                    select(HealthCheckResult.document_id).where(
+                        HealthCheckResult.company_id == company_uuid,
+                        HealthCheckResult.document_type == "ACCOUNT",
+                        HealthCheckResult.kind == KIND_POST_LEDGER,
+                        HealthCheckResult.status == STATUS_BLOCKED,
+                    )
+                ).all()
+                stale_acc = {d for d in prior_acc if d not in flagged_acc_uuids}
+                if stale_acc:
+                    _auto_clear_stale(db, company_id=company_uuid, batch_id=batch_id, stale_doc_ids=stale_acc)
+                    db.commit()
+            logger.info("[SuHe][Audit] batch=%s persisted %d accrual account(s)", batch_id, len(flagged_acc_uuids))
 
         # --- 6b. reconcile: auto-clear rows this run no longer flags ------
         # "Latest run wins": documents re-checked this run that are no longer
