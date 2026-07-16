@@ -63,6 +63,7 @@ _VAGUE_ACCOUNT_NAME_KEYWORDS = (
     "uncategorised", "uncategorized", "unapplied", "unspecified",
     "general expense", "general expenses", "sundry", "miscellaneous",
     "misc expense", "suspense", "to be allocated", "ask my accountant",
+    "other expense", "other debtor", "other creditor",
 )
 
 # Xero direction: ACCREC/ACCRECCREDIT post to revenue-side accounts,

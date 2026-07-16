@@ -17,6 +17,9 @@ _COA = {
     "999": "Suspense Account",
     "420": "Telephone & Internet",
     "500": "Cost of Goods Sold",
+    "860": "Other Debtors",
+    "870": "Other Creditors",
+    "490": "Other Expenses",
 }
 
 
@@ -41,6 +44,12 @@ def test_below_materiality_not_flagged():
 
 def test_specific_account_not_flagged():
     assert _find_misallocated_items([_tx("1", "420", "5000.00")], _COA) == []
+
+
+def test_other_catch_all_accounts_flagged_by_name():
+    for code in ("860", "870", "490"):
+        hits = _find_misallocated_items([_tx("1", code, "800.00")], _COA)
+        assert len(hits) == 1 and hits[0].current_code == code
 
 
 def test_suspense_account_flagged_by_name():
