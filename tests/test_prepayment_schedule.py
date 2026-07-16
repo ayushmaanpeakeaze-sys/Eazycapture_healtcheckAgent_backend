@@ -93,7 +93,7 @@ def test_identifies_prepayment_account_by_type_or_name():
 def test_collect_only_prepayment_account_lines():
     from app.modules.healthcheck.checks.prepayment_schedule import collect_prepayment_items
     docs = [{
-        "Date": "2026-07-15", "Reference": "INV1", "Contact": {"Name": "Aviva"},
+        "Type": "ACCPAY", "Date": "2026-07-15", "Reference": "INV1", "Contact": {"Name": "Aviva"},
         "LineItems": [
             {"AccountCode": "620", "LineAmount": 1200, "Description": "Annual insurance"},
             {"AccountCode": "429", "LineAmount": 500, "Description": "Sundries"},  # expense — skip
@@ -104,6 +104,20 @@ def test_collect_only_prepayment_account_lines():
     assert len(items) == 1
     assert items[0]["account_code"] == "620"
     assert items[0]["supplier"] == "Aviva"
+
+
+def test_collect_includes_spend_money_excludes_sales_and_receipts():
+    from app.modules.healthcheck.checks.prepayment_schedule import collect_prepayment_items
+    line = [{"AccountCode": "620", "LineAmount": 1000, "Description": "Annual licence"}]
+    docs = [
+        {"Type": "ACCPAY", "Contact": {"Name": "Bill"}, "LineItems": line},   # bill → in
+        {"Type": "SPEND", "Contact": {"Name": "Spend"}, "LineItems": line},   # Spend Money → in
+        {"Type": "ACCREC", "Contact": {"Name": "Sale"}, "LineItems": line},   # sales → out
+        {"Type": "RECEIVE", "Contact": {"Name": "Rcpt"}, "LineItems": line},  # release/refund → out
+        {"Type": "ACCPAYCREDIT", "Contact": {"Name": "CN"}, "LineItems": line},  # credit note → out
+    ]
+    items = collect_prepayment_items(docs, {"620": "Prepayments"}, {"620": "CURRENT"})
+    assert sorted(i["supplier"] for i in items) == ["Bill", "Spend"]
 
 
 def test_ledger_balance_override_and_source():

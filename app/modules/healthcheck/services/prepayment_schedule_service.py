@@ -1,16 +1,10 @@
-"""Prepayment schedule service — assemble the working paper for one company.
-
-Ties together the synced Prepayments-account lines (the amortisation grid) and
-the ACTUAL account balance read from Xero via the Trial Balance action, so the
-schedule reconciles against the real ledger. Nango action-first (the proxy is
-only the library's own fallback inside the integration layer); nothing posts.
-"""
+"""Assemble the prepayment schedule for one company: synced Prepayments lines +
+the real account balance from the Xero Trial Balance action. Review-only."""
 from __future__ import annotations
 
 import logging
 from datetime import date
 from typing import Any, Optional
-from uuid import UUID
 
 from app.modules.integrations.service import IntegrationService
 from app.modules.integrations.sync import db_read
@@ -44,7 +38,11 @@ class PrepaymentScheduleService:
             if is_prepayment_account(a.get("Name"), a.get("Type")):
                 prepay_codes.add(code)
 
-        documents = db_read.read_raw(self._db, company.id, "invoice")
+        # Bills + Spend Money — a prepayment can be paid either way.
+        documents = (
+            db_read.read_raw(self._db, company.id, "invoice")
+            + db_read.read_raw(self._db, company.id, "bank_transaction")
+        )
         items = collect_prepayment_items(documents, coa_name, coa_type)
 
         ledger_balance = await self._ledger_balance(company, year_end, prepay_codes)

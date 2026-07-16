@@ -1,12 +1,5 @@
-"""Prepayment schedule — the amortisation working paper.
-
-Lays out the items sitting in a Prepayments account month-by-month (the grid),
-with each line's carry-forward balance at the year-end, a per-month total, and a
-reconciliation of the schedule balance to the account's ledger balance.
-
-Guidance only: the month-end release journals are for the accountant to post —
-nothing is auto-posted (SOP: "Do not auto-book").
-"""
+"""Prepayment schedule — the amortisation working paper: month-by-month grid,
+carry-forward balance per line, and reconciliation to the ledger. Review-only."""
 from __future__ import annotations
 
 from datetime import date
@@ -33,15 +26,20 @@ def is_prepayment_account(name: str | None, acc_type: str | None) -> bool:
     return any(h in low for h in _PREPAYMENT_NAME_HINTS)
 
 
+# Debit side only: bills + Spend Money post into Prepayments; sales/receipts/credits net out.
+_PREPAYMENT_DEBIT_DOC_TYPES = {"ACCPAY", "SPEND"}
+
+
 def collect_prepayment_items(
     documents: list[dict],
     coa_name: dict[str, str],
     coa_type: dict[str, str],
 ) -> list[dict]:
-    """Every invoice/bill line posted to a Prepayments account, shaped for
-    ``build_prepayment_schedule``. ``documents`` are raw Xero invoice/bill dicts."""
+    """Bill / Spend-Money lines posted to a Prepayments account, shaped for the builder."""
     items: list[dict] = []
     for doc in documents:
+        if (doc.get("Type") or "").strip().upper() not in _PREPAYMENT_DEBIT_DOC_TYPES:
+            continue
         contact = (doc.get("Contact") or {}).get("Name")
         for li in (doc.get("LineItems") or []):
             code = str(li.get("AccountCode") or "").strip()
