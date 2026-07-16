@@ -15,7 +15,7 @@ def _tx(tid, desc, amt, contact, vendor="V", typ="SPEND"):
 def test_generic_description_flagged():
     f = find_unusual_payments([_tx("A", "payment", 5000, "c1", vendor="Unknown")])
     assert len(f) == 1
-    assert f[0]["reason"] == "unclear_description"
+    assert f[0].match_reasons["reason"] == "unclear_description"
 
 
 def test_clear_description_not_flagged_for_desc():
@@ -30,8 +30,8 @@ def test_one_off_large_supplier_flagged():
     f = find_unusual_payments([_tx("D", "Consulting services", 40000, "c9", vendor="Rare Ltd")],
                               large_amount="1000")
     assert len(f) == 1
-    assert f[0]["reason"] == "one_off_supplier"
-    assert f[0]["amount"] == "40000.00"
+    assert f[0].match_reasons["reason"] == "one_off_supplier"
+    assert f[0].match_reasons["amount"] == "40000.00"
 
 
 def test_large_but_frequent_supplier_not_one_off():
@@ -44,7 +44,7 @@ def test_one_finding_per_payment():
     # A generic-description one-off payment → ONE finding (unclear wins), not two.
     f = find_unusual_payments([_tx("A", "transfer", 9000, "c1", vendor="X")], large_amount="1000")
     assert len(f) == 1
-    assert f[0]["reason"] == "unclear_description"
+    assert f[0].match_reasons["reason"] == "unclear_description"
 
 
 def test_only_payments_scanned():

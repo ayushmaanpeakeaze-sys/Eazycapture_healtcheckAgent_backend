@@ -55,6 +55,8 @@ IssueType = Literal[
     "future_dated",
     "currency_mismatch",
     "invalid_status_combo",
+    "missing_accrual",
+    "unusual_payment",
 ]
 Severity = Literal["critical", "high", "medium"]
 

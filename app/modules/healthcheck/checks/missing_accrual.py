@@ -81,3 +81,8 @@ def find_missing_accruals(
                 "message": msg[:200],
             })
     return findings
+
+
+SETTING_FIELDS: tuple = ()
+# built=False until the account-level persistence is wired (detection is ready).
+META: tuple[tuple[str, str, bool], ...] = (("missing_accrual", "Accruals", False),)

@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections import Counter
 from decimal import Decimal
 
+from app.shared.transaction import FlaggedIssue
+
 _PAYMENT_DOC_TYPES = {"ACCPAY", "SPEND"}
 _GENERIC_DESC = {
     "payment", "transfer", "online", "bank", "misc", "miscellaneous", "chq",
@@ -36,13 +38,13 @@ def find_unusual_payments(
     transactions,
     large_amount: Decimal | str = "1000",
     one_off_max_count: int = 2,
-) -> list[dict]:
+) -> list[FlaggedIssue]:
     large = Decimal(str(large_amount))
     payments = [tx for tx in transactions
                 if (tx.type or "").strip().upper() in _PAYMENT_DOC_TYPES]
     freq = Counter(_contact_key(tx) for tx in payments)
 
-    findings: list[dict] = []
+    findings: list[FlaggedIssue] = []
     for tx in payments:
         amt = abs(tx.amount or Decimal("0"))
         supplier = (tx.vendor_name or "").strip()
@@ -63,15 +65,21 @@ def _symbol(tx) -> str:
     return "£" if (tx.currency_code or "GBP").strip().upper() == "GBP" else f"{tx.currency_code} "
 
 
-def _finding(tx, reason: str, severity: str, amt: Decimal, msg: str) -> dict:
-    return {
-        "issue_type": ISSUE_TYPE,
-        "transaction_id": tx.transaction_id,
-        "reason": reason,
-        "severity": severity,
-        "supplier": (tx.vendor_name or "").strip(),
-        "date": tx.date.isoformat(),
-        "amount": f"{amt:.2f}",
-        "current_code": (tx.current_account_code or "").strip() or None,
-        "message": msg[:200],
-    }
+def _finding(tx, reason: str, severity: str, amt: Decimal, msg: str) -> FlaggedIssue:
+    return FlaggedIssue(
+        transaction_id=tx.transaction_id,
+        issue_type=ISSUE_TYPE,
+        severity=severity,
+        message=msg[:200],
+        current_code=(tx.current_account_code or "").strip() or None,
+        match_reasons={
+            "reason": reason,
+            "supplier": (tx.vendor_name or "").strip(),
+            "date": tx.date.isoformat(),
+            "amount": f"{amt:.2f}",
+        },
+    )
+
+
+SETTING_FIELDS: tuple = ()
+META: tuple[tuple[str, str, bool], ...] = (("unusual_payment", "Unusual payments", True),)
