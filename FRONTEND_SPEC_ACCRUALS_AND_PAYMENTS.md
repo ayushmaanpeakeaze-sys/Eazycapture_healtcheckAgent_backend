@@ -6,8 +6,8 @@ Both are **separate** from the LLM `anomaly` card (that stays untouched).
 
 | Card | issue_type | Group | Status |
 |---|---|---|---|
-| **Unusual payments** | `unusual_payment` | Payments & Anomalies | ✅ live (emits from the audit) |
-| **Accruals** | `missing_accrual` | Date & Ageing | detection ready; account-level persistence pending (`built:false`) |
+| **Unusual payments** | `unusual_payment` | Payments & Anomalies | ✅ live (transaction-level) |
+| **Accruals** | `missing_accrual` | Date & Ageing | ✅ live (account-level, `document_type: "ACCOUNT"`) |
 
 Both appear in `GET /api/v1/health/audit-config/` and toggle via `disabled_rules[]`.
 
@@ -51,13 +51,13 @@ Transaction-level, so each flag is a normal trapped row. `result.flagged[]` item
 
 ---
 
-## 2. Accruals — `missing_accrual` (detection ready)
+## 2. Accruals — `missing_accrual` (LIVE)
 
-**Account-level** (a gap = a missing transaction), so it renders like the contact checks:
-the "document" is an **account**, not an invoice. One card "Accruals", each item is an
-account + missing month with a reason.
+Fetch: `GET /api/v1/health/trapped-invoices/?company_id=<id>&issue_type=missing_accrual`.
 
-Finding shape (what the engine will emit per account, grouped into one row per account):
+**Account-level**: the row's `document_type` is `"ACCOUNT"` and `document_id` is the Xero
+AccountID (like contacts use `"CONTACT"`). One card "Accruals"; each `result.flagged[]`
+item is a missing month with a reason. Group by the account row.
 
 ```jsonc
 {
@@ -93,8 +93,8 @@ Finding shape (what the engine will emit per account, grouped into one row per a
 
 ## Note for the API/consumer
 
-- `unusual_payment` is transaction-level and already in the trapped feed today.
-- `missing_accrual` will arrive keyed on the **AccountID** with `document_type: "ACCOUNT"`
-  (mirrors how contacts use `document_type: "CONTACT"`), once its persistence step ships.
-  Handle it the same way the feed handles CONTACT rows (group by the account, render the
-  items inside).
+- `unusual_payment` — transaction-level, normal trapped rows.
+- `missing_accrual` — keyed on the **AccountID** with `document_type: "ACCOUNT"` (mirrors
+  `"CONTACT"`). Handle it like CONTACT rows: group by the account, render the items inside.
+  It runs on the whole financial year (ignores the Period selector) and re-runs on every
+  audit (auto-clears accounts no longer flagged).
