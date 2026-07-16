@@ -12,7 +12,7 @@ from datetime import date
 from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy import delete, select
@@ -1551,6 +1551,55 @@ async def health_stats(
         by_severity=by_sev,
         generated_at=datetime.now(timezone.utc),
     )
+
+
+async def _org_year_end_date(db: AsyncSession, company_id: UUID) -> date:
+    """The org's financial year-end as a concrete date (the current period end);
+    defaults to 31 Dec."""
+    from calendar import monthrange
+    from app.modules.integrations.sync.models import XeroDocument
+
+    org = ((await db.scalars(
+        select(XeroDocument.raw_json).where(
+            XeroDocument.company_id == company_id,
+            XeroDocument.entity == "organisation",
+        )
+    )).first()) or {}
+    try:
+        m, d = int(org.get("FinancialYearEndMonth")), int(org.get("FinancialYearEndDay"))
+    except (TypeError, ValueError, AttributeError):
+        m, d = 12, 31
+    if not (1 <= m <= 12 and 1 <= d <= 31):
+        m, d = 12, 31
+    today = date.today()
+    ye = date(today.year, m, min(d, monthrange(today.year, m)[1]))
+    return ye if ye >= today else date(today.year + 1, m, min(d, monthrange(today.year + 1, m)[1]))
+
+
+@router.get(
+    "/prepayment-schedule/",
+    status_code=status.HTTP_200_OK,
+    summary="Prepayment schedule — amortisation grid, carry-forward balance, and Xero reconciliation.",
+)
+async def prepayment_schedule(
+    company_id: UUID = Depends(get_current_company_id),
+    year_end: Optional[date] = Query(
+        None, description="Schedule 'as at' year-end (YYYY-MM-DD). Defaults to the org's financial year-end.",
+    ),
+    months: int = Query(12, ge=1, le=24, description="Number of month columns."),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The prepayment working paper: every Prepayments-account line amortised
+    month-by-month, its carry-forward balance at the year-end, and a reconciliation
+    to the real Xero account balance (Trial Balance). Review-only — nothing posts."""
+    from app.modules.healthcheck.models import Company
+    from app.modules.healthcheck.services.prepayment_schedule_service import PrepaymentScheduleService
+
+    company = await db.get(Company, company_id)
+    if company is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found.")
+    ye = year_end or await _org_year_end_date(db, company_id)
+    return await PrepaymentScheduleService(db).build(company, ye, months=months)
 
 
 @router.get(
