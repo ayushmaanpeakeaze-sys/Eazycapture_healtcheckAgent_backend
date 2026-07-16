@@ -1,8 +1,10 @@
 """Missing accruals (pattern-based) — a regular monthly expense with a gap.
 
 For each P&L expense account that normally posts every month, flag a month with no
-cost: the final month (highest — likely a year-end accrual), a post-year payment that
-relates back, or an interim gap. Review-only; average monthly amount is guidance.
+cost: the final month (likely a year-end accrual), a post-year payment that relates
+back, a lone interim gap, or a run of 2+ consecutive missing months (irregular
+timing). Only positive expense postings (debits) count as activity — reversing
+credits (opening reversals) are ignored per the SOP. Review-only; average is guidance.
 """
 from __future__ import annotations
 
@@ -40,11 +42,14 @@ def find_missing_accruals(
             code = (code or "").strip()
             if not code or (coa_type.get(code) or "").strip().upper() not in _PURE_EXPENSE_ACCOUNT_TYPES:
                 continue
+            amt = amount or Decimal("0")
+            if amt <= 0:
+                continue
             key = (tx.date.year, tx.date.month)
             if key in idx:
                 i = idx[key]
                 present[code][i] = True
-                totals[code][i] += abs(amount or Decimal("0"))
+                totals[code][i] += amt
             elif key == (post.year, post.month):
                 post_year[code] = True
 
@@ -55,34 +60,52 @@ def find_missing_accruals(
         name = coa_name.get(code, code)
         vals = [totals[code][i] for i in range(months) if seen[i]]
         avg = (sum(vals) / Decimal(len(vals))).quantize(Decimal("0.01")) if vals else Decimal("0")
-        for i in range(months):
-            if seen[i]:
-                continue
-            is_final = i == months - 1
-            if is_final and post_year[code]:
-                reason, sev = "post_year_cutoff", "high"
-                msg = (f"{name}: no cost in {cols[i]:%b %Y} (final month) but a payment "
-                       f"appears after year-end — accrue the prior month.")
-            elif is_final:
-                reason, sev = "final_month_missing", "high"
-                msg = f"{name}: no cost in the final month {cols[i]:%b %Y} — accrual likely required."
-            else:
-                reason, sev = "missing_month", "medium"
-                msg = (f"{name}: normally posts monthly but {cols[i]:%b %Y} is missing — "
-                       f"review whether an accrual is required.")
+
+        def _add(month_label, reason, sev, msg, is_post=False):
             findings.append({
                 "issue_type": ISSUE_TYPE,
                 "account_id": coa_id.get(code),
                 "account_code": code,
                 "account_name": name,
-                "missing_month": f"{cols[i]:%b %Y}",
+                "missing_month": month_label,
                 "reason": reason,
                 "severity": sev,
-                "post_year_payment": is_final and post_year[code],
+                "post_year_payment": is_post,
                 "months_present": sum(seen),
                 "avg_monthly_amount": str(avg),
                 "message": msg[:200],
             })
+
+        i = 0
+        while i < months - 1:
+            if seen[i]:
+                i += 1
+                continue
+            j = i
+            while j < months - 1 and not seen[j]:
+                j += 1
+            run = list(range(i, j))
+            if len(run) >= 2:
+                first, last = cols[run[0]], cols[run[-1]]
+                _add(f"{first:%b %Y} – {last:%b %Y}", "large_gap", "high",
+                     f"{name}: no cost for {len(run)} consecutive months "
+                     f"({first:%b %Y} – {last:%b %Y}) — irregular timing; review for "
+                     f"missing entries or an accrual.")
+            else:
+                _add(f"{cols[run[0]]:%b %Y}", "missing_month", "medium",
+                     f"{name}: normally posts monthly but {cols[run[0]]:%b %Y} is missing — "
+                     f"review whether an accrual is required.")
+            i = j
+
+        if not seen[months - 1]:
+            last = cols[months - 1]
+            if post_year[code]:
+                _add(f"{last:%b %Y}", "post_year_cutoff", "high",
+                     f"{name}: no cost in {last:%b %Y} (final month) but a payment "
+                     f"appears after year-end — accrue the prior month.", is_post=True)
+            else:
+                _add(f"{last:%b %Y}", "final_month_missing", "high",
+                     f"{name}: no cost in the final month {last:%b %Y} — accrual likely required.")
     return findings
 
 

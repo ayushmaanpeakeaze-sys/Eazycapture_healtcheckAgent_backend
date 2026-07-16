@@ -51,10 +51,42 @@ def test_interim_month_missing_is_medium():
     assert f[0]["missing_month"] == "Dec 2025"
 
 
+def test_consecutive_gap_is_large_gap_high():
+    txns = _year("445", [(2025, m) for m in (4, 5, 6, 7, 8)] + [(2025, 12), (2026, 1), (2026, 2), (2026, 3)])
+    f = find_missing_accruals(txns, _COA, _TYPES, date(2026, 3, 31))
+    assert len(f) == 1
+    assert f[0]["reason"] == "large_gap"
+    assert f[0]["severity"] == "high"
+    assert f[0]["missing_month"] == "Sep 2025 – Nov 2025"
+
+
 def test_irregular_account_not_flagged():
     # Only 3 months of activity → not a regular monthly account.
     assert find_missing_accruals(_year("445", [(2025, 4), (2025, 8), (2025, 12)]),
                                  _COA, _TYPES, date(2026, 3, 31)) == []
+
+
+def test_opening_reversal_does_not_mask_final_month():
+    txns = _year("445", [(2025, m) for m in range(4, 13)] + [(2026, 1), (2026, 2)])
+    txns.append(_tx("445", 2026, 3, amt="-1000"))
+    f = find_missing_accruals(txns, _COA, _TYPES, date(2026, 3, 31))
+    assert len(f) == 1
+    assert f[0]["reason"] == "final_month_missing"
+
+
+def test_reversal_does_not_inflate_regularity():
+    txns = _year("445", [(2025, m) for m in range(4, 11)])
+    txns.append(_tx("445", 2025, 11, amt="-500"))
+    assert find_missing_accruals(txns, _COA, _TYPES, date(2026, 3, 31)) == []
+
+
+def test_post_year_reversal_is_not_cutoff():
+    txns = _year("469", [(2025, m) for m in range(4, 13)] + [(2026, 1), (2026, 2)])
+    txns.append(_tx("469", 2026, 4, amt="-1000"))
+    f = find_missing_accruals(txns, _COA, _TYPES, date(2026, 3, 31))
+    assert len(f) == 1
+    assert f[0]["reason"] == "final_month_missing"
+    assert f[0]["post_year_payment"] is False
 
 
 def test_balance_sheet_account_ignored():
