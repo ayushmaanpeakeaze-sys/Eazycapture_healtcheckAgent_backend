@@ -9,7 +9,6 @@ nothing is auto-posted (SOP: "Do not auto-book").
 """
 from __future__ import annotations
 
-from calendar import monthrange
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -18,6 +17,63 @@ from dateutil.relativedelta import relativedelta
 from app.modules.healthcheck.checks.prepayments import _extract_period, _end_of_month
 
 _Q = Decimal("0.001")
+
+
+_PREPAYMENT_ACCOUNT_TYPES = {"PREPAYMENT"}
+_PREPAYMENT_NAME_HINTS = ("prepay", "prepaid")
+
+
+def is_prepayment_account(name: str | None, acc_type: str | None) -> bool:
+    """A Prepayments account — Xero's PREPAYMENT type, or a name that says so
+    (many orgs park prepayments in a Current-Asset account literally named
+    'Prepayments')."""
+    if (acc_type or "").strip().upper() in _PREPAYMENT_ACCOUNT_TYPES:
+        return True
+    low = (name or "").lower()
+    return any(h in low for h in _PREPAYMENT_NAME_HINTS)
+
+
+def collect_prepayment_items(
+    documents: list[dict],
+    coa_name: dict[str, str],
+    coa_type: dict[str, str],
+) -> list[dict]:
+    """Every invoice/bill line posted to a Prepayments account, shaped for
+    ``build_prepayment_schedule``. ``documents`` are raw Xero invoice/bill dicts."""
+    items: list[dict] = []
+    for doc in documents:
+        contact = (doc.get("Contact") or {}).get("Name")
+        for li in (doc.get("LineItems") or []):
+            code = str(li.get("AccountCode") or "").strip()
+            if not code or not is_prepayment_account(coa_name.get(code), coa_type.get(code)):
+                continue
+            items.append({
+                "date": _xero_date(doc.get("Date")),
+                "invoice_no": doc.get("InvoiceNumber") or doc.get("Reference") or doc.get("CreditNoteNumber"),
+                "supplier": contact,
+                "description": li.get("Description") or doc.get("Reference"),
+                "account_code": code,
+                "account_name": coa_name.get(code, code),
+                "amount": li.get("LineAmount") or 0,
+            })
+    return items
+
+
+def _xero_date(raw) -> date | None:
+    """Xero '/Date(ms+0000)/' or ISO → date."""
+    if not raw:
+        return None
+    s = str(raw)
+    if s.startswith("/Date("):
+        try:
+            ms = int(s[6:].split("+")[0].split("-")[0])
+            return date.fromtimestamp(ms / 1000)
+        except (ValueError, OverflowError, OSError):
+            return None
+    try:
+        return date.fromisoformat(s[:10])
+    except ValueError:
+        return None
 
 
 def _fy_month_ends(year_end: date, months: int = 12) -> list[date]:

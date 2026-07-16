@@ -80,3 +80,27 @@ def test_ledger_gap_is_flagged():
     assert Decimal(s["validation"]["ledger_balance"]) == Decimal("120000")
     assert Decimal(s["validation"]["schedule_balance"]) == Decimal("0")
     assert s["validation"]["reconciled"] is False
+
+
+def test_identifies_prepayment_account_by_type_or_name():
+    from app.modules.healthcheck.checks.prepayment_schedule import is_prepayment_account
+    assert is_prepayment_account("Prepayments", "CURRENT") is True     # by name
+    assert is_prepayment_account("Deferred costs", "PREPAYMENT") is True  # by Xero type
+    assert is_prepayment_account("General Expenses", "OVERHEADS") is False
+    assert is_prepayment_account("Rent", "EXPENSE") is False
+
+
+def test_collect_only_prepayment_account_lines():
+    from app.modules.healthcheck.checks.prepayment_schedule import collect_prepayment_items
+    docs = [{
+        "Date": "2026-07-15", "Reference": "INV1", "Contact": {"Name": "Aviva"},
+        "LineItems": [
+            {"AccountCode": "620", "LineAmount": 1200, "Description": "Annual insurance"},
+            {"AccountCode": "429", "LineAmount": 500, "Description": "Sundries"},  # expense — skip
+        ],
+    }]
+    items = collect_prepayment_items(docs, {"620": "Prepayments", "429": "General Expenses"},
+                                     {"620": "CURRENT", "429": "OVERHEADS"})
+    assert len(items) == 1
+    assert items[0]["account_code"] == "620"
+    assert items[0]["supplier"] == "Aviva"
