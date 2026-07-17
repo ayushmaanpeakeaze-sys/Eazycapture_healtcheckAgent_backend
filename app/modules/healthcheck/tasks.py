@@ -892,6 +892,35 @@ def _drop_already_capitalised(
     return kept
 
 
+# SOP hierarchy tiers — Capital > Prepayment > Payment/Inconsistency.
+_HIER_CAPITAL = ("capital_item_review", "low_cost_fixed_asset")
+_HIER_PREPAYMENT = {"prepayment_review"}
+_HIER_PAYMENT = {"unusual_payment", "amount_outlier", "misallocated_item"}
+
+
+def _apply_hierarchy(flagged: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A transaction already explained by a higher tier keeps that flag; its
+    lower-tier flags are tagged ``superseded_by`` (hidden from their card at
+    persistence, kept in ``result.superseded`` — never deleted). Runs AFTER the
+    asset-dedup so a dropped capital flag can't orphan a demoted one."""
+    by_txn: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for f in flagged:
+        by_txn[str(f.get("transaction_id") or "")].append(f)
+    for items in by_txn.values():
+        types = {f.get("issue_type") for f in items}
+        capital = next((t for t in _HIER_CAPITAL if t in types), None)
+        if capital:
+            demote, tag = _HIER_PREPAYMENT | _HIER_PAYMENT, capital
+        elif types & _HIER_PREPAYMENT:
+            demote, tag = _HIER_PAYMENT, "prepayment_review"
+        else:
+            continue
+        for f in items:
+            if f.get("issue_type") in demote and not f.get("superseded_by"):
+                f["superseded_by"] = tag
+    return flagged
+
+
 def _call_rules_batch(
     transactions: list[dict[str, Any]],
     org_ctx: Optional[dict[str, Any]] = None,
@@ -961,6 +990,8 @@ def _call_rules_batch(
             continue
     # SOP Step 7: drop capital flags for items already on the fixed-asset register.
     flagged = _drop_already_capitalised(flagged, transactions, (org_ctx or {}).get("assets") or [])
+    # SOP hierarchy: demote lower-tier flags already explained by capital/prepayment.
+    flagged = _apply_hierarchy(flagged)
     return flagged
 
 
@@ -1048,12 +1079,16 @@ def _persist_trapped(
         document_type = str(transaction.get("type") or "unknown")
 
         flagged_total += 1
-        rule_ids = [str(i.get("issue_type") or "") for i in items if i.get("issue_type")]
-        messages = [str(i.get("message") or "") for i in items if i.get("message")]
+        # Hierarchy: superseded flags stay out of the visible card + counts, but
+        # are preserved under "superseded" so nothing is lost and they can resurface.
+        active = [i for i in items if not i.get("superseded_by")]
+        superseded = [i for i in items if i.get("superseded_by")]
+        rule_ids = [str(i.get("issue_type") or "") for i in active if i.get("issue_type")]
+        messages = [str(i.get("message") or "") for i in active if i.get("message")]
         joined_msgs = " | ".join(m for m in messages if m)
 
         result_payload = {
-            "flagged": items,
+            "flagged": active,
             "rule_ids": rule_ids,
             "messages": joined_msgs,
             "target_ledger": DEFAULT_TARGET_LEDGER,
@@ -1093,6 +1128,8 @@ def _persist_trapped(
             "xero_reference": (transaction.get("reference") or "").strip() or None,
             "invoice_status": (transaction.get("status") or "").strip().upper() or None,
         }
+        if superseded:
+            result_payload["superseded"] = superseded
 
         # Is this document already trapped from a previous run?
         existing_row = db.execute(
@@ -1111,14 +1148,19 @@ def _persist_trapped(
                 continue
             # Otherwise re-score with the latest run. For a scoped run merge:
             # replace only the issue types this run evaluated, keep the rest.
+            # Superseded flags are merged the same way, kept out of "flagged".
             if evaluated_types is None:
-                merged_flagged = items
+                merged_flagged = active
+                merged_superseded = superseded
             else:
-                kept = [
+                merged_flagged = [
                     f for f in (er.get("flagged") or [])
                     if (f.get("issue_type") or "") not in evaluated_types
-                ]
-                merged_flagged = kept + items
+                ] + active
+                merged_superseded = [
+                    f for f in (er.get("superseded") or [])
+                    if (f.get("issue_type") or "") not in evaluated_types
+                ] + superseded
             merged_rids = [str(f.get("issue_type")) for f in merged_flagged if f.get("issue_type")]
             merged_msgs = " | ".join(
                 m for m in (f.get("message") or "" for f in merged_flagged) if m
@@ -1129,6 +1171,10 @@ def _persist_trapped(
                 "rule_ids": merged_rids,
                 "messages": merged_msgs,
             }
+            if merged_superseded:
+                existing_row.result["superseded"] = merged_superseded
+            else:
+                existing_row.result.pop("superseded", None)
             existing_row.error_msgs = (merged_msgs[:1000] or None)
             # Bump ``ran_at`` for a fresh "last checked" time; it only auto-fills
             # on insert, so a re-scored row would otherwise keep its old timestamp.

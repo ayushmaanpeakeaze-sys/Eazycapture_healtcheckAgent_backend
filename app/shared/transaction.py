@@ -217,6 +217,10 @@ class FlaggedIssue(_StrictBase):
     # Structured signals behind a duplicate flag (same_contact, same_amount,
     # days_apart, reference_match, confidence, tier), for the UI chips.
     match_reasons: Optional[dict] = None
+    # Hierarchy precedence (Capital > Prepayment > Payment): set to the winning
+    # higher-tier issue_type when this flag is already explained by it. Hidden
+    # from its card, kept in ``result.superseded`` — never deleted.
+    superseded_by: Optional[str] = None
 
 
 class BatchHealthCheckResponse(_StrictBase):
