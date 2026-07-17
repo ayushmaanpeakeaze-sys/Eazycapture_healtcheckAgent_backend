@@ -41,6 +41,7 @@ _CATEGORY_MODULES: tuple[str, ...] = (
     "contacts",
     "missing_accrual",
     "unusual_payments",
+    "payroll",
 )
 
 

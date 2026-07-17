@@ -57,6 +57,7 @@ IssueType = Literal[
     "invalid_status_combo",
     "missing_accrual",
     "unusual_payment",
+    "non_payroll_payment",      # SOP — bank payee not in the payroll employee list
 ]
 Severity = Literal["critical", "high", "medium"]
 
@@ -178,6 +179,9 @@ class BatchContext(_StrictBase):
     # the party tiebreaker: same VAT confirms same company, different VAT rules
     # the pair out. Empty when a contact has no VAT (then it falls back to name).
     contact_vat: dict[str, str] = Field(default_factory=dict)
+    # Approved payroll employee names (Xero Payroll via Nango action). Merged
+    # with the per-client configured list for the non-payroll-payment check.
+    payroll_employees: list[str] = Field(default_factory=list)
 
 
 class BatchHealthCheckRequest(_StrictBase):

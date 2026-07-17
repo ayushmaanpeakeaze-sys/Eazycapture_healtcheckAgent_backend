@@ -33,7 +33,7 @@ _INT_FIELDS = {"duplicate_days_window", "overdue_days", "credit_age_days",
 _TUPLE_FIELDS = {"misallocated_vague_codes", "tax_missing_ignore_accounts",
                  "tax_missing_ignore_contacts", "multi_account_whitelist_contacts",
                  "bank_exclude_accounts", "capital_monitored_accounts",
-                 "undocumented_ignore_contacts"}
+                 "undocumented_ignore_contacts", "payroll_employee_names"}
 # Boolean fields.
 _BOOL_FIELDS = {"ignore_generic_contact", "duplicate_require_same_amount",
                 "duplicate_require_exact_reference", "duplicate_also_check_paid",
@@ -165,6 +165,8 @@ class AuditSettings:
     # Contact ids OR names that legitimately post to many accounts (e.g. Amazon)
     # — suppresses the multi_account_supplier flag for them.
     multi_account_whitelist_contacts: tuple[str, ...] = ()
+    # --- payroll: approved employee names (configured; merged with Xero Payroll) ---
+    payroll_employee_names: tuple[str, ...] = ()
     # --- bank balance check (statement vs GL balance per account) ---
     bank_balance_tolerance: Decimal = Decimal("0.01")
     bank_exclude_accounts: tuple[str, ...] = ()   # personal/credit-card accounts

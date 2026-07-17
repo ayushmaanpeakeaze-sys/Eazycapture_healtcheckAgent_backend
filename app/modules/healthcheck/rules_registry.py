@@ -22,6 +22,7 @@ from app.modules.healthcheck.checks.duplicates import META as _DUPLICATES_META
 from app.modules.healthcheck.checks.fixed_assets import META as _FIXED_ASSETS_META
 from app.modules.healthcheck.checks.missing_accrual import META as _ACCRUAL_META
 from app.modules.healthcheck.checks.prepayments import META as _PREPAYMENTS_META
+from app.modules.healthcheck.checks.payroll import META as _PAYROLL_META
 from app.modules.healthcheck.checks.tax import META as _TAX_META
 from app.modules.healthcheck.checks.unusual_payments import META as _UNUSUAL_META
 
@@ -36,7 +37,7 @@ _GROUPS: dict[str, list[tuple[str, str, bool]]] = {
     "Contacts": list(_CONTACTS_META),
     "Document Integrity": list(_DOCUMENTS_META),
     "Fixed Assets": list(_FIXED_ASSETS_META),
-    "Payments & Anomalies": list(_UNUSUAL_META),
+    "Payments & Anomalies": list(_UNUSUAL_META) + list(_PAYROLL_META),
     "Currency": [
         ("currency_mismatch", "Currency mismatch", False),
     ],

@@ -34,6 +34,7 @@ from app.modules.healthcheck.checks.fixed_assets import (
 )
 from app.modules.healthcheck.checks.prepayments import _find_prepayments
 from app.modules.healthcheck.checks.unusual_payments import find_unusual_payments
+from app.modules.healthcheck.checks.payroll import find_non_payroll_payments
 from app.modules.healthcheck.checks.coding import (
     _find_direction_mismatches,
     _find_misallocated_items,
@@ -210,6 +211,11 @@ async def run_batch_health_check(
     # Unusual payments (Pattern SOP, deterministic): blank/generic descriptions +
     # large one-off suppliers, over bills + Spend Money.
     flagged.extend(find_unusual_payments(transactions + bank_transactions, coa_type_lookup))
+    # Payments to people not in payroll (SOP): a bank SPEND whose payee isn't in
+    # the merged payroll list (configured names + synced Xero Payroll employees).
+    _payroll_names = list(settings.payroll_employee_names) + (
+        context.payroll_employees if context else [])
+    flagged.extend(find_non_payroll_payments(bank_transactions, _payroll_names))
     # If the LLM anomaly pass didn't run, fall back to the deterministic
     # amount_outlier flags so outliers are still surfaced.
     if (not do_anomaly_llm or anomaly_llm_failed) and run_amount_outlier:
