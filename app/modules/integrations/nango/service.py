@@ -453,6 +453,15 @@ class NangoService:
         return await self._action_list_full(
             connection_id, "list-assets", "assets", tenant_id, page, where, modified_since)
 
+    async def action_list_payroll_employees(
+        self, connection_id: str, tenant_id: Optional[str] = None, page: int = 1,
+        where: Optional[str] = None, modified_since: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """``list-payroll-employees`` — one page of Xero Payroll employees (approved
+        staff). Needs the ``payroll.employees.read`` scope on the connection."""
+        return await self._action_list_full(
+            connection_id, "list-payroll-employees", "employees", tenant_id, page, where, modified_since)
+
     async def action_get_trial_balance(
         self,
         connection_id: str,

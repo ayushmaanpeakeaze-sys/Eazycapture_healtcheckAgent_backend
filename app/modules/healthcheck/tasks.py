@@ -755,6 +755,21 @@ def _org_year_end(org: Any) -> dict[str, int]:
     return {}
 
 
+def _payroll_employee_names(rows: list[dict[str, Any]]) -> list[str]:
+    """Xero Payroll employee rows → display names (FirstName LastName). Empty
+    until the payroll.employees.read scope is granted (0 synced employees)."""
+    names: list[str] = []
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        full = " ".join(
+            str(r.get(k) or "").strip() for k in ("FirstName", "LastName")
+        ).strip() or str(r.get("Name") or "").strip()
+        if full:
+            names.append(full)
+    return names
+
+
 def _accrual_year_end(fy: dict[str, int], today: date) -> date:
     """Most recent COMPLETED financial year-end (the year being closed)."""
     from calendar import monthrange
@@ -775,6 +790,8 @@ def _db_org_context(company_id: UUID) -> dict[str, Any]:
             org = db_read.read_organisation(s, company_id)
             # fixed-asset register (SOP Step 7 dedup); empty until assets.read granted
             assets_raw = db_read.read_raw(s, company_id, "asset")
+            # payroll employees (non-payroll-payment SOP); empty until scope granted
+            employees_raw = db_read.read_raw(s, company_id, "employee")
         coa = _map_xero_accounts(accounts_raw)
         tax_rates = _map_xero_tax_rates(tax_rates_raw)
         base_currency = (
@@ -794,6 +811,7 @@ def _db_org_context(company_id: UUID) -> dict[str, Any]:
             "base_currency": base_currency,
             "shortcode": shortcode,
             "assets": assets_raw,
+            "payroll_employees": _payroll_employee_names(employees_raw),
             "financial_year_end": _org_year_end(org),
         }
     except Exception:
@@ -811,6 +829,7 @@ def _build_context(
     duplicate_contact_pairs: Optional[list[list[str]]] = None,
     contact_defaults: Optional[list[dict[str, Any]]] = None,
     contact_vat: Optional[dict[str, str]] = None,
+    payroll_employees: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     ctx: dict[str, Any] = {
         "chart_of_accounts": coa or HARDCODED_CHART_OF_ACCOUNTS,
@@ -822,6 +841,8 @@ def _build_context(
         ctx["contact_defaults"] = contact_defaults
     if contact_vat:
         ctx["contact_vat"] = contact_vat
+    if payroll_employees:
+        ctx["payroll_employees"] = payroll_employees
     return ctx
 
 
@@ -945,6 +966,7 @@ def _call_rules_batch(
         duplicate_contact_pairs=(org_ctx or {}).get("duplicate_contact_pairs"),
         contact_defaults=(org_ctx or {}).get("contact_defaults"),
         contact_vat=(org_ctx or {}).get("contact_vat"),
+        payroll_employees=(org_ctx or {}).get("payroll_employees"),
     )
     cfg = audit_config or {}
     disabled_rules = cfg.get("disabled_rules") or []

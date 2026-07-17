@@ -207,6 +207,15 @@ async def _fetch_assets(nango, conn, tenant, page, since):
         return []  # assets.read scope not granted yet → 0 records
 
 
+# Xero Payroll is a separate API surface (payroll.employees.read scope). Action
+# only — no accounting-proxy fallback; a missing scope just yields 0 employees.
+async def _fetch_payroll_employees(nango, conn, tenant, page, since):
+    try:
+        return await nango.action_list_payroll_employees(conn, tenant_id=tenant, page=page)
+    except Exception:
+        return []  # payroll.employees.read scope not granted yet → 0 records
+
+
 # The ten mirrored entities. First five are incremental (actions honour the
 # watermark); the rest are small / watermark-less full refreshes. EVERY entity is
 # action-first with a proxy fallback, so a disabled or failing action (e.g. a
@@ -238,6 +247,8 @@ ENTITY_SPECS: dict[str, EntitySpec] = {
         "journal", "full", "JournalID", _fetch_journals),
     "asset": EntitySpec(
         "asset", "full", "assetId", _fetch_assets),
+    "employee": EntitySpec(
+        "employee", "full", "EmployeeID", _fetch_payroll_employees),
 }
 
 

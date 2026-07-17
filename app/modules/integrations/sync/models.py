@@ -48,6 +48,7 @@ SYNC_ENTITIES: tuple[str, ...] = (
     "organisation",
     "journal",
     "asset",
+    "employee",
 )
 
 
