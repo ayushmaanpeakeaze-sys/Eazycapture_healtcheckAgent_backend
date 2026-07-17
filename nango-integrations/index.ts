@@ -14,6 +14,7 @@ import './xero/actions/list-payments.js';               // payments (IsReconcile
 import './xero/actions/list-organisation.js';           // organisation (base currency / period)
 import './xero/actions/list-journals.js';               // raw GL journals + lines (incl. manual journals) — SOP
 import './xero/actions/list-assets.js';                 // fixed-asset register (capitalised) — SOP dedup
+import './xero/actions/list-payroll-employees.js';      // payroll employees — SOP (bank payee vs payroll)
 import './xero/actions/get-trial-balance.js';           // trial balance report (Balance in Xero)
 import './xero/syncs/invoices-full.js';
 
